@@ -1,5 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Legend } from "recharts";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Legend, Tooltip } from "recharts";
 import { Progress } from "@/components/ui/progress";
 import type { DashboardStats } from "@/lib/types";
 
@@ -38,6 +38,7 @@ export default function Charts({ stats }: ChartsProps) {
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="time" />
                 <YAxis />
+                <Tooltip />
                 <Legend />
                 <Line 
                   type="monotone" 
