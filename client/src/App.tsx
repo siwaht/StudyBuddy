@@ -6,6 +6,10 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import Dashboard from "@/pages/dashboard";
 import CallDetail from "@/pages/call-detail";
 import UserManagement from "@/pages/user-management";
+import Calls from "@/pages/calls";
+import Agents from "@/pages/agents";
+import Analytics from "@/pages/analytics";
+import Settings from "@/pages/settings";
 import NotFound from "@/pages/not-found";
 import Sidebar from "@/components/layout/sidebar";
 import Header from "@/components/layout/header";
@@ -15,8 +19,12 @@ function Router() {
     <Switch>
       <Route path="/" component={Dashboard} />
       <Route path="/dashboard" component={Dashboard} />
+      <Route path="/calls" component={Calls} />
       <Route path="/calls/:id" component={CallDetail} />
+      <Route path="/agents" component={Agents} />
+      <Route path="/analytics" component={Analytics} />
       <Route path="/user-management" component={UserManagement} />
+      <Route path="/settings" component={Settings} />
       <Route component={NotFound} />
     </Switch>
   );
