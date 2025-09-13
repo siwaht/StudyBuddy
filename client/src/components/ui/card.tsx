@@ -12,11 +12,7 @@ const Card = React.forwardRef<HTMLDivElement, CardProps>(
     <div
       ref={ref}
       className={cn(
-        premium
-          ? "card-premium rounded-xl parallax-hover"
-          : glass
-          ? "glass rounded-xl tilt-card"
-          : "rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-lg hover:scale-[1.01]",
+        "rounded-lg border bg-card text-card-foreground shadow-sm",
         className
       )}
       {...props}
@@ -46,9 +42,7 @@ const CardTitle = React.forwardRef<HTMLDivElement, CardTitleProps>(
     <div
       ref={ref}
       className={cn(
-        gradient
-          ? "text-2xl font-bold leading-none tracking-tight gradient-text"
-          : "text-2xl font-semibold leading-none tracking-tight",
+        "text-2xl font-semibold leading-none tracking-tight",
         className
       )}
       {...props}

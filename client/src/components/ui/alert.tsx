@@ -4,17 +4,17 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "@/lib/utils"
 
 const alertVariants = cva(
-  "relative w-full rounded-xl p-4 [&>svg~*]:pl-7 [&>svg+div]:translate-y-[-3px] [&>svg]:absolute [&>svg]:left-4 [&>svg]:top-4 [&>svg]:text-foreground backdrop-blur-md transition-all duration-300",
+  "relative w-full rounded-lg border p-4 [&>svg~*]:pl-7 [&>svg+div]:translate-y-[-3px] [&>svg]:absolute [&>svg]:left-4 [&>svg]:top-4 [&>svg]:text-foreground",
   {
     variants: {
       variant: {
-        default: "bg-white/80 border border-purple-200/30 text-foreground shadow-lg shadow-purple-500/5 hover:shadow-xl hover:border-purple-300/40",
+        default: "bg-background text-foreground border-border",
         destructive:
-          "bg-red-50/80 border border-red-200/50 text-red-700 shadow-lg shadow-red-500/10 hover:shadow-xl hover:border-red-300/60 [&>svg]:text-red-600",
+          "bg-destructive/10 border-destructive/30 text-destructive [&>svg]:text-destructive",
         success:
-          "bg-emerald-50/80 border border-emerald-200/50 text-emerald-700 shadow-lg shadow-emerald-500/10 hover:shadow-xl hover:border-emerald-300/60 [&>svg]:text-emerald-600",
+          "bg-green-50 border-green-200 text-green-800 [&>svg]:text-green-600",
         warning:
-          "bg-amber-50/80 border border-amber-200/50 text-amber-700 shadow-lg shadow-amber-500/10 hover:shadow-xl hover:border-amber-300/60 [&>svg]:text-amber-600",
+          "bg-yellow-50 border-yellow-200 text-yellow-800 [&>svg]:text-yellow-600",
       },
     },
     defaultVariants: {
@@ -44,7 +44,6 @@ const AlertTitle = React.forwardRef<
     ref={ref}
     className={cn(
       "mb-1 font-semibold leading-none tracking-tight",
-      "bg-gradient-to-r from-purple-900 to-indigo-900 bg-clip-text text-transparent",
       className
     )}
     {...props}
