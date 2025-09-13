@@ -77,6 +77,43 @@ export const userAgents = pgTable("user_agents", {
   };
 });
 
+// Phone numbers management
+export const phoneNumbers = pgTable("phone_numbers", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  number: varchar("number").notNull(),
+  provider: varchar("provider", { enum: ["twilio", "sip"] }).notNull(),
+  accountId: varchar("account_id"),
+  agentId: varchar("agent_id").references(() => agents.id),
+  configuration: jsonb("configuration"),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+});
+
+// Sync history for tracking synchronization operations
+export const syncHistory = pgTable("sync_history", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  agentId: varchar("agent_id").references(() => agents.id).notNull(),
+  syncType: varchar("sync_type", { enum: ["full", "incremental"] }).notNull(),
+  itemsSynced: integer("items_synced").notNull().default(0),
+  status: varchar("status", { enum: ["pending", "in_progress", "completed", "failed"] }).notNull(),
+  errorMessage: text("error_message"),
+  startedAt: timestamp("started_at").notNull().default(sql`now()`),
+  completedAt: timestamp("completed_at"),
+});
+
+// Playground sessions for testing agents
+export const playgroundSessions = pgTable("playground_sessions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  agentId: varchar("agent_id").references(() => agents.id).notNull(),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  sessionId: text("session_id"), // ElevenLabs session ID
+  duration: integer("duration"), // in seconds
+  transcript: jsonb("transcript"),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+});
+
 // Accounts for external service integrations (supports multiple accounts per service)
 export const accounts = pgTable("accounts", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -139,6 +176,22 @@ export const insertAccountSchema = createInsertSchema(accounts).omit({
   updatedAt: true,
 });
 
+export const insertPhoneNumberSchema = createInsertSchema(phoneNumbers).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertSyncHistorySchema = createInsertSchema(syncHistory).omit({
+  id: true,
+  startedAt: true,
+});
+
+export const insertPlaygroundSessionSchema = createInsertSchema(playgroundSessions).omit({
+  id: true,
+  createdAt: true,
+});
+
 // Types
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -160,3 +213,12 @@ export type InsertUserAgent = z.infer<typeof insertUserAgentSchema>;
 
 export type Account = typeof accounts.$inferSelect;
 export type InsertAccount = z.infer<typeof insertAccountSchema>;
+
+export type PhoneNumber = typeof phoneNumbers.$inferSelect;
+export type InsertPhoneNumber = z.infer<typeof insertPhoneNumberSchema>;
+
+export type SyncHistory = typeof syncHistory.$inferSelect;
+export type InsertSyncHistory = z.infer<typeof insertSyncHistorySchema>;
+
+export type PlaygroundSession = typeof playgroundSessions.$inferSelect;
+export type InsertPlaygroundSession = z.infer<typeof insertPlaygroundSessionSchema>;

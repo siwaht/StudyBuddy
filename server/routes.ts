@@ -921,7 +921,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Import historical conversations from ElevenLabs
-  app.post("/api/agents/:agentId/import-conversations", requireAuth, requireAdmin, async (req: Request, res: Response) => {
+  app.post("/api/agents/:agentId/import-conversations", requireAuth, async (req: Request, res: Response) => {
     try {
       const { agentId } = req.params;
       const { accountId, startTime, endTime, limit } = req.body;
