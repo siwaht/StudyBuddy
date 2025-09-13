@@ -770,10 +770,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
         lastSynced: null,
       });
       
-      // Test the connection if it's ElevenLabs
+      // Test the connection based on service
       if (service === 'elevenlabs') {
-        // Will need to update elevenLabsIntegration to accept accountId
-        // For now, we'll skip the test
+        const testResult = await elevenLabsIntegration.testConnection(account.id);
+        if (!testResult) {
+          // Delete the account if connection test fails
+          await storage.deleteAccount(account.id);
+          return res.status(400).json({ 
+            message: "Invalid ElevenLabs API key. Please check that you've copied the entire API key from your ElevenLabs profile settings.",
+            hint: "You can find your API key at https://elevenlabs.io/app/settings/api-keys" 
+          });
+        }
+      } else if (service === 'livekit') {
+        // For LiveKit, validate that the key contains both API key and secret
+        if (!apiKey.includes(':')) {
+          await storage.deleteAccount(account.id);
+          return res.status(400).json({ 
+            message: "Invalid LiveKit credentials format. Please enter in format: API_KEY:API_SECRET",
+            hint: "Combine your API key and secret with a colon between them" 
+          });
+        }
       }
       
       res.status(201).json({ 
@@ -895,7 +911,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Initialize and fetch agent from ElevenLabs
-      const agent = await elevenLabsIntegration.fetchAgentById(agentId);
+      const agent = await elevenLabsIntegration.fetchAgentById(agentId, accountId as string);
       
       if (!agent) {
         return res.status(404).json({ message: "Agent not found in ElevenLabs" });
@@ -935,7 +951,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Fetch agent from ElevenLabs
-      const externalAgent = await elevenLabsIntegration.fetchAgentById(agentId);
+      const externalAgent = await elevenLabsIntegration.fetchAgentById(agentId, accountId);
       
       if (!externalAgent) {
         return res.status(404).json({ message: "Agent not found in ElevenLabs" });
