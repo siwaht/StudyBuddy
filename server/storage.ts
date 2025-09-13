@@ -5,7 +5,7 @@ import {
   type PerformanceMetric, type InsertPerformanceMetric,
   type LiveKitRoom, type InsertLiveKitRoom,
   type UserAgent, type InsertUserAgent,
-  type ApiKey, type InsertApiKey
+  type Account, type InsertAccount
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 import bcrypt from "bcryptjs";
@@ -134,12 +134,13 @@ export interface IStorage {
     }>;
   }>;
 
-  // API Keys Management
-  getApiKey(service: string): Promise<ApiKey | undefined>;
-  getAllApiKeys(): Promise<ApiKey[]>;
-  createApiKey(apiKey: InsertApiKey): Promise<ApiKey>;
-  updateApiKey(service: string, encryptedKey: string): Promise<ApiKey | undefined>;
-  deleteApiKey(service: string): Promise<boolean>;
+  // Accounts Management
+  getAccount(accountId: string): Promise<Account | undefined>;
+  getAllAccounts(): Promise<Account[]>;
+  getAccountsByService(service: 'elevenlabs' | 'livekit'): Promise<Account[]>;
+  createAccount(account: InsertAccount): Promise<Account>;
+  updateAccount(accountId: string, updates: Partial<Account>): Promise<Account | undefined>;
+  deleteAccount(accountId: string): Promise<boolean>;
 
   // Permissions Management
   getUserPermissions(userId: string): Promise<Record<string, boolean>>;
@@ -154,7 +155,7 @@ export class MemStorage implements IStorage {
   private performanceMetrics: Map<string, PerformanceMetric> = new Map();
   private liveKitRooms: Map<string, LiveKitRoom> = new Map();
   private userAgents: Map<string, UserAgent> = new Map();
-  private apiKeys: Map<string, ApiKey> = new Map();
+  private accounts: Map<string, Account> = new Map();
 
   constructor() {
     this.seedDataAsync();
@@ -229,12 +230,68 @@ export class MemStorage implements IStorage {
 
     users.forEach(user => this.users.set(user.id, user));
 
-    // Seed agents
+    // Seed accounts for ElevenLabs and LiveKit
+    const accounts = [
+      {
+        id: randomUUID(),
+        name: "Production ElevenLabs",
+        service: "elevenlabs" as const,
+        encryptedApiKey: "encrypted_elevenlabs_key_production",
+        isActive: true,
+        lastSynced: new Date(Date.now() - 2 * 60 * 60 * 1000), // 2 hours ago
+        metadata: { workspace: "Production Workspace" },
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      {
+        id: randomUUID(),
+        name: "Development ElevenLabs",
+        service: "elevenlabs" as const,
+        encryptedApiKey: "encrypted_elevenlabs_key_dev",
+        isActive: true,
+        lastSynced: new Date(Date.now() - 24 * 60 * 60 * 1000), // 1 day ago
+        metadata: { workspace: "Dev Workspace" },
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      {
+        id: randomUUID(),
+        name: "Main LiveKit Account",
+        service: "livekit" as const,
+        encryptedApiKey: "encrypted_livekit_key_main",
+        isActive: true,
+        lastSynced: new Date(Date.now() - 1 * 60 * 60 * 1000), // 1 hour ago
+        metadata: { region: "us-east-1" },
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      {
+        id: randomUUID(),
+        name: "Backup LiveKit Account",
+        service: "livekit" as const,
+        encryptedApiKey: "encrypted_livekit_key_backup",
+        isActive: false,
+        lastSynced: null,
+        metadata: { region: "eu-west-1" },
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    ];
+
+    accounts.forEach(account => this.accounts.set(account.id, account));
+
+    // Get account IDs for linking agents
+    const prodElevenLabsId = accounts.find(a => a.name === "Production ElevenLabs")?.id;
+    const devElevenLabsId = accounts.find(a => a.name === "Development ElevenLabs")?.id;
+    const mainLiveKitId = accounts.find(a => a.name === "Main LiveKit Account")?.id;
+
+    // Seed agents linked to accounts
     const agents = [
       {
         id: randomUUID(),
         name: "SalesBot",
         platform: "elevenlabs" as const,
+        accountId: prodElevenLabsId || null,
         description: "High quality voice agent for sales inquiries",
         externalId: null,
         metadata: null,
@@ -245,6 +302,7 @@ export class MemStorage implements IStorage {
         id: randomUUID(),
         name: "SupportRouter",
         platform: "livekit" as const,
+        accountId: mainLiveKitId || null,
         description: "Advanced technical support worker with GPT-4o integration",
         externalId: null,
         metadata: null,
@@ -255,6 +313,7 @@ export class MemStorage implements IStorage {
         id: randomUUID(),
         name: "IVR Assistant",
         platform: "elevenlabs" as const,
+        accountId: devElevenLabsId || null,
         description: "Initial call routing and FAQ handling",
         externalId: null,
         metadata: null,
@@ -265,6 +324,7 @@ export class MemStorage implements IStorage {
         id: randomUUID(),
         name: "Customer Service Bot",
         platform: "livekit" as const,
+        accountId: mainLiveKitId || null,
         description: "General customer service inquiries",
         externalId: null,
         metadata: null,
@@ -656,6 +716,7 @@ export class MemStorage implements IStorage {
       ...insertAgent,
       id: randomUUID(),
       createdAt: new Date(),
+      accountId: insertAgent.accountId || null,
       description: insertAgent.description || null,
       externalId: insertAgent.externalId || null,
       metadata: insertAgent.metadata || null,
@@ -1306,49 +1367,53 @@ export class MemStorage implements IStorage {
     };
   }
 
-  // API Keys Management
-  async getApiKey(service: string): Promise<ApiKey | undefined> {
-    return Array.from(this.apiKeys.values()).find(key => key.service === service);
+  // Accounts Management
+  async getAccount(accountId: string): Promise<Account | undefined> {
+    return this.accounts.get(accountId);
   }
 
-  async getAllApiKeys(): Promise<ApiKey[]> {
-    return Array.from(this.apiKeys.values());
+  async getAllAccounts(): Promise<Account[]> {
+    return Array.from(this.accounts.values());
   }
 
-  async createApiKey(apiKey: InsertApiKey): Promise<ApiKey> {
+  async getAccountsByService(service: 'elevenlabs' | 'livekit'): Promise<Account[]> {
+    return Array.from(this.accounts.values()).filter(account => account.service === service);
+  }
+
+  async createAccount(account: InsertAccount): Promise<Account> {
     const id = randomUUID();
-    const newKey: ApiKey = {
+    const newAccount: Account = {
       id,
-      ...apiKey,
-      lastUsed: null,
-      isActive: apiKey.isActive ?? true,
+      ...account,
+      lastSynced: null,
+      isActive: account.isActive ?? true,
+      metadata: account.metadata || null,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
-    this.apiKeys.set(id, newKey);
-    return newKey;
+    this.accounts.set(id, newAccount);
+    return newAccount;
   }
 
-  async updateApiKey(service: string, encryptedKey: string): Promise<ApiKey | undefined> {
-    const existing = await this.getApiKey(service);
+  async updateAccount(accountId: string, updates: Partial<Account>): Promise<Account | undefined> {
+    const existing = this.accounts.get(accountId);
     if (!existing) {
-      // Create new if doesn't exist
-      return this.createApiKey({ service: service as any, encryptedKey });
+      return undefined;
     }
     
-    const updated: ApiKey = {
+    const updated: Account = {
       ...existing,
-      encryptedKey,
+      ...updates,
+      id: existing.id, // Never change the ID
       updatedAt: new Date(),
     };
-    this.apiKeys.set(existing.id, updated);
+    this.accounts.set(accountId, updated);
     return updated;
   }
 
-  async deleteApiKey(service: string): Promise<boolean> {
-    const key = await this.getApiKey(service);
-    if (key) {
-      this.apiKeys.delete(key.id);
+  async deleteAccount(accountId: string): Promise<boolean> {
+    if (this.accounts.has(accountId)) {
+      this.accounts.delete(accountId);
       return true;
     }
     return false;

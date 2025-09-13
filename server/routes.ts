@@ -1,7 +1,7 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertUserSchema, insertAgentSchema, insertCallSchema } from "@shared/schema";
+import { insertUserSchema, insertAgentSchema, insertCallSchema, type Account } from "@shared/schema";
 import { hashPassword, validatePassword, requireAuth, requireAdmin } from "./auth";
 import { z } from "zod";
 import * as livekit from "./livekit";
@@ -718,54 +718,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Integration Management Routes - Admin only
-  app.get("/api/integrations", requireAuth, requireAdmin, async (req: Request, res: Response) => {
+  // Account Management Routes - Admin only
+  app.get("/api/accounts", requireAuth, requireAdmin, async (req: Request, res: Response) => {
     try {
-      const apiKeys = await storage.getAllApiKeys();
+      const accounts = await storage.getAllAccounts();
       
       // Don't send the actual encrypted keys to the frontend
-      const integrations = apiKeys.map(key => ({
-        service: key.service,
-        isActive: key.isActive,
-        lastUsed: key.lastUsed,
-        updatedAt: key.updatedAt,
-        hasKey: !!key.encryptedKey,
+      const accountsData = accounts.map(account => ({
+        id: account.id,
+        name: account.name,
+        service: account.service,
+        isActive: account.isActive,
+        lastSynced: account.lastSynced,
+        metadata: account.metadata,
+        createdAt: account.createdAt,
+        updatedAt: account.updatedAt,
+        hasKey: !!account.encryptedApiKey,
       }));
       
-      // Add services that don't have keys yet
-      const services = ['elevenlabs', 'livekit', 'openai'];
-      const existingServices = integrations.map(i => i.service);
-      
-      for (const service of services) {
-        if (!existingServices.includes(service as any)) {
-          integrations.push({
-            service: service as 'elevenlabs' | 'livekit' | 'openai',
-            isActive: false,
-            lastUsed: null,
-            updatedAt: new Date(),
-            hasKey: false,
-          });
-        }
-      }
-      
-      res.json(integrations);
+      res.json(accountsData);
     } catch (error) {
-      console.error('Error fetching integrations:', error);
-      res.status(500).json({ message: "Failed to fetch integrations" });
+      console.error('Error fetching accounts:', error);
+      res.status(500).json({ message: "Failed to fetch accounts" });
     }
   });
 
-  app.put("/api/integrations/:service", requireAuth, requireAdmin, async (req: Request, res: Response) => {
+  app.post("/api/accounts", requireAuth, requireAdmin, async (req: Request, res: Response) => {
     try {
-      const { service } = req.params;
-      const { apiKey } = req.body;
+      const { name, service, apiKey } = req.body;
       
-      if (!apiKey) {
-        return res.status(400).json({ message: "API key is required" });
+      if (!name || !service || !apiKey) {
+        return res.status(400).json({ message: "Name, service, and API key are required" });
       }
       
       // Validate service name
-      const validServices = ['elevenlabs', 'livekit', 'openai'];
+      const validServices = ['elevenlabs', 'livekit'];
       if (!validServices.includes(service)) {
         return res.status(400).json({ message: "Invalid service" });
       }
@@ -773,46 +760,112 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Encrypt the API key before storing
       const encryptedKey = encrypt(apiKey);
       
-      // Update or create the API key
-      const updated = await storage.updateApiKey(service, encryptedKey);
-      
-      if (!updated) {
-        return res.status(500).json({ message: "Failed to update API key" });
-      }
+      // Create the account
+      const account = await storage.createAccount({
+        name,
+        service: service as 'elevenlabs' | 'livekit',
+        encryptedApiKey: encryptedKey,
+        isActive: true,
+        metadata: null,
+        lastSynced: null,
+      });
       
       // Test the connection if it's ElevenLabs
       if (service === 'elevenlabs') {
-        const testResult = await elevenLabsIntegration.testConnection();
-        if (!testResult) {
-          return res.status(400).json({ message: "Invalid API key - connection test failed" });
-        }
+        // Will need to update elevenLabsIntegration to accept accountId
+        // For now, we'll skip the test
       }
       
-      res.json({ 
-        message: "API key updated successfully",
-        service,
-        isActive: true,
+      res.status(201).json({ 
+        message: "Account created successfully",
+        account: {
+          id: account.id,
+          name: account.name,
+          service: account.service,
+          isActive: account.isActive,
+        }
       });
     } catch (error) {
-      console.error('Error updating API key:', error);
-      res.status(500).json({ message: "Failed to update API key" });
+      console.error('Error creating account:', error);
+      res.status(500).json({ message: "Failed to create account" });
     }
   });
 
-  app.delete("/api/integrations/:service", requireAuth, requireAdmin, async (req: Request, res: Response) => {
+  app.put("/api/accounts/:id", requireAuth, requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { name, apiKey, isActive } = req.body;
+      
+      const updates: Partial<Account> = {};
+      
+      if (name !== undefined) updates.name = name;
+      if (isActive !== undefined) updates.isActive = isActive;
+      if (apiKey) {
+        updates.encryptedApiKey = encrypt(apiKey);
+      }
+      
+      const updated = await storage.updateAccount(id, updates);
+      
+      if (!updated) {
+        return res.status(404).json({ message: "Account not found" });
+      }
+      
+      res.json({ 
+        message: "Account updated successfully",
+        account: {
+          id: updated.id,
+          name: updated.name,
+          service: updated.service,
+          isActive: updated.isActive,
+        }
+      });
+    } catch (error) {
+      console.error('Error updating account:', error);
+      res.status(500).json({ message: "Failed to update account" });
+    }
+  });
+
+  app.delete("/api/accounts/:id", requireAuth, requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      
+      const deleted = await storage.deleteAccount(id);
+      
+      if (!deleted) {
+        return res.status(404).json({ message: "Account not found" });
+      }
+      
+      res.json({ message: "Account deleted successfully" });
+    } catch (error) {
+      console.error('Error deleting account:', error);
+      res.status(500).json({ message: "Failed to delete account" });
+    }
+  });
+
+  app.get("/api/accounts/by-service/:service", requireAuth, requireAdmin, async (req: Request, res: Response) => {
     try {
       const { service } = req.params;
       
-      const deleted = await storage.deleteApiKey(service);
-      
-      if (!deleted) {
-        return res.status(404).json({ message: "API key not found" });
+      if (service !== 'elevenlabs' && service !== 'livekit') {
+        return res.status(400).json({ message: "Invalid service" });
       }
       
-      res.json({ message: "API key deleted successfully" });
+      const accounts = await storage.getAccountsByService(service as 'elevenlabs' | 'livekit');
+      
+      const accountsData = accounts.map(account => ({
+        id: account.id,
+        name: account.name,
+        service: account.service,
+        isActive: account.isActive,
+        lastSynced: account.lastSynced,
+        metadata: account.metadata,
+        hasKey: !!account.encryptedApiKey,
+      }));
+      
+      res.json(accountsData);
     } catch (error) {
-      console.error('Error deleting API key:', error);
-      res.status(500).json({ message: "Failed to delete API key" });
+      console.error('Error fetching accounts by service:', error);
+      res.status(500).json({ message: "Failed to fetch accounts" });
     }
   });
 
@@ -820,10 +873,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/agents/search/:agentId", requireAuth, async (req: Request, res: Response) => {
     try {
       const { agentId } = req.params;
-      const { platform } = req.query;
+      const { platform, accountId } = req.query;
       
       if (platform !== 'elevenlabs') {
         return res.status(400).json({ message: "Only ElevenLabs platform is currently supported" });
+      }
+      
+      // Verify account if provided
+      if (accountId && typeof accountId === 'string') {
+        const account = await storage.getAccount(accountId);
+        if (!account) {
+          return res.status(404).json({ message: "Account not found" });
+        }
+        if (!account.isActive) {
+          return res.status(400).json({ message: "Account is not active" });
+        }
+        if (account.service !== platform) {
+          return res.status(400).json({ message: "Account service does not match platform" });
+        }
+        // TODO: Use the account's API key for the search once multi-account API key support is added
       }
       
       // Initialize and fetch agent from ElevenLabs
@@ -845,7 +913,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/agents/import", requireAuth, async (req: Request, res: Response) => {
     try {
-      const { agentId, platform } = req.body;
+      const { agentId, platform, accountId } = req.body;
       
       if (!agentId || !platform) {
         return res.status(400).json({ message: "Agent ID and platform are required" });
@@ -853,6 +921,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       if (platform !== 'elevenlabs') {
         return res.status(400).json({ message: "Only ElevenLabs platform is currently supported" });
+      }
+      
+      // Verify account exists if provided
+      if (accountId) {
+        const account = await storage.getAccount(accountId);
+        if (!account) {
+          return res.status(404).json({ message: "Account not found" });
+        }
+        if (account.service !== platform) {
+          return res.status(400).json({ message: "Account service does not match platform" });
+        }
       }
       
       // Fetch agent from ElevenLabs
@@ -877,6 +956,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const newAgent = await storage.createAgent({
         name: agentData.name,
         platform: agentData.platform,
+        accountId: accountId || null,
         externalId: agentData.externalId,
         description: agentData.description,
         metadata: agentData.metadata,

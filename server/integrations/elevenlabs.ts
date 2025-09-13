@@ -20,38 +20,42 @@ interface ElevenLabsAgent {
 }
 
 export class ElevenLabsIntegration {
-  private apiKey: string | null = null;
   private baseUrl = 'https://api.elevenlabs.io/v1';
 
-  async initialize(): Promise<boolean> {
+  async getApiKey(accountId?: string): Promise<string | null> {
     try {
-      // Try to get API key from database first
-      const apiKeyRecord = await storage.getApiKey('elevenlabs');
-      if (apiKeyRecord && apiKeyRecord.isActive) {
-        this.apiKey = decrypt(apiKeyRecord.encryptedKey);
-        return true;
+      // If accountId is provided, get that specific account
+      if (accountId) {
+        const account = await storage.getAccount(accountId);
+        if (account && account.isActive && account.service === 'elevenlabs') {
+          return decrypt(account.encryptedApiKey);
+        }
+      }
+      
+      // Otherwise, get the first active ElevenLabs account
+      const accounts = await storage.getAccountsByService('elevenlabs');
+      const activeAccount = accounts.find(a => a.isActive);
+      if (activeAccount) {
+        return decrypt(activeAccount.encryptedApiKey);
       }
 
       // Fallback to environment variable
       const envKey = process.env.ELEVENLABS_API_KEY;
       if (envKey) {
-        this.apiKey = envKey;
-        return true;
+        return envKey;
       }
 
-      return false;
+      return null;
     } catch (error) {
-      console.error('Failed to initialize ElevenLabs integration:', error);
-      return false;
+      console.error('Failed to get ElevenLabs API key:', error);
+      return null;
     }
   }
 
-  async fetchAgentById(agentId: string): Promise<ElevenLabsAgent | null> {
-    if (!this.apiKey) {
-      const initialized = await this.initialize();
-      if (!initialized) {
-        throw new Error('ElevenLabs API key not configured');
-      }
+  async fetchAgentById(agentId: string, accountId?: string): Promise<ElevenLabsAgent | null> {
+    const apiKey = await this.getApiKey(accountId);
+    if (!apiKey) {
+      throw new Error('ElevenLabs API key not configured');
     }
 
     try {
@@ -59,16 +63,15 @@ export class ElevenLabsIntegration {
         `${this.baseUrl}/convai/agents/${agentId}`,
         {
           headers: {
-            'xi-api-key': this.apiKey,
+            'xi-api-key': apiKey,
             'Content-Type': 'application/json',
           },
         }
       );
 
-      // Update last used timestamp
-      const apiKeyRecord = await storage.getApiKey('elevenlabs');
-      if (apiKeyRecord) {
-        await storage.updateApiKey('elevenlabs', apiKeyRecord.encryptedKey);
+      // Update last synced timestamp if we have an accountId
+      if (accountId) {
+        await storage.updateAccount(accountId, { lastSynced: new Date() });
       }
 
       return response.data;
@@ -81,12 +84,10 @@ export class ElevenLabsIntegration {
     }
   }
 
-  async listAgents(limit: number = 100): Promise<ElevenLabsAgent[]> {
-    if (!this.apiKey) {
-      const initialized = await this.initialize();
-      if (!initialized) {
-        throw new Error('ElevenLabs API key not configured');
-      }
+  async listAgents(limit: number = 100, accountId?: string): Promise<ElevenLabsAgent[]> {
+    const apiKey = await this.getApiKey(accountId);
+    if (!apiKey) {
+      throw new Error('ElevenLabs API key not configured');
     }
 
     try {
@@ -94,7 +95,7 @@ export class ElevenLabsIntegration {
         `${this.baseUrl}/convai/agents`,
         {
           headers: {
-            'xi-api-key': this.apiKey,
+            'xi-api-key': apiKey,
             'Content-Type': 'application/json',
           },
           params: {
@@ -103,6 +104,11 @@ export class ElevenLabsIntegration {
         }
       );
 
+      // Update last synced timestamp if we have an accountId
+      if (accountId) {
+        await storage.updateAccount(accountId, { lastSynced: new Date() });
+      }
+
       return response.data.agents || [];
     } catch (error: any) {
       console.error('Error listing agents from ElevenLabs:', error.response?.data || error.message);
@@ -110,12 +116,10 @@ export class ElevenLabsIntegration {
     }
   }
 
-  async testConnection(): Promise<boolean> {
-    if (!this.apiKey) {
-      const initialized = await this.initialize();
-      if (!initialized) {
-        return false;
-      }
+  async testConnection(accountId?: string): Promise<boolean> {
+    const apiKey = await this.getApiKey(accountId);
+    if (!apiKey) {
+      return false;
     }
 
     try {
@@ -124,7 +128,7 @@ export class ElevenLabsIntegration {
         `${this.baseUrl}/user`,
         {
           headers: {
-            'xi-api-key': this.apiKey,
+            'xi-api-key': apiKey,
           },
         }
       );

@@ -19,6 +19,7 @@ export const agents = pgTable("agents", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
   platform: varchar("platform", { enum: ["elevenlabs", "livekit"] }).notNull(),
+  accountId: varchar("account_id"), // Reference to the account this agent belongs to
   externalId: text("external_id"), // Platform-specific agent ID
   description: text("description"),
   metadata: jsonb("metadata"), // Store platform-specific metadata
@@ -76,13 +77,15 @@ export const userAgents = pgTable("user_agents", {
   };
 });
 
-// API Keys for external service integrations
-export const apiKeys = pgTable("api_keys", {
+// Accounts for external service integrations (supports multiple accounts per service)
+export const accounts = pgTable("accounts", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  service: varchar("service", { enum: ["elevenlabs", "livekit", "openai"] }).notNull().unique(),
-  encryptedKey: text("encrypted_key").notNull(),
-  lastUsed: timestamp("last_used"),
+  name: text("name").notNull(), // User-friendly label like "Production ElevenLabs"
+  service: varchar("service", { enum: ["elevenlabs", "livekit"] }).notNull(),
+  encryptedApiKey: text("encrypted_api_key").notNull(),
   isActive: boolean("is_active").notNull().default(true),
+  lastSynced: timestamp("last_synced"), // When we last synced data from this account
+  metadata: jsonb("metadata"), // Account-specific info like workspace name
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
   updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
 });
@@ -96,6 +99,18 @@ export const insertUserSchema = createInsertSchema(users).omit({
 export const insertAgentSchema = createInsertSchema(agents).omit({
   id: true,
   createdAt: true,
+});
+
+export const selectAgentSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  platform: z.enum(["elevenlabs", "livekit"]),
+  accountId: z.string().nullable().optional(),
+  externalId: z.string().nullable().optional(),
+  description: z.string().nullable().optional(),
+  metadata: z.any().nullable().optional(),
+  isActive: z.boolean(),
+  createdAt: z.date(),
 });
 
 export const insertCallSchema = createInsertSchema(calls).omit({
@@ -118,7 +133,7 @@ export const insertUserAgentSchema = createInsertSchema(userAgents).omit({
   assignedAt: true,
 });
 
-export const insertApiKeySchema = createInsertSchema(apiKeys).omit({
+export const insertAccountSchema = createInsertSchema(accounts).omit({
   id: true,
   createdAt: true,
   updatedAt: true,
@@ -143,5 +158,5 @@ export type InsertLiveKitRoom = z.infer<typeof insertLiveKitRoomSchema>;
 export type UserAgent = typeof userAgents.$inferSelect;
 export type InsertUserAgent = z.infer<typeof insertUserAgentSchema>;
 
-export type ApiKey = typeof apiKeys.$inferSelect;
-export type InsertApiKey = z.infer<typeof insertApiKeySchema>;
+export type Account = typeof accounts.$inferSelect;
+export type InsertAccount = z.infer<typeof insertAccountSchema>;

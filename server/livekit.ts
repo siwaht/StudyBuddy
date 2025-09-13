@@ -1,23 +1,78 @@
 import { AccessToken, RoomServiceClient, ParticipantInfo, Room } from 'livekit-server-sdk';
+import { storage } from './storage';
+import { decrypt } from './utils/crypto';
 
-// Initialize LiveKit with environment variables
-const LIVEKIT_URL = process.env.LIVEKIT_URL || 'wss://tawasul-safqo3pu.livekit.cloud';
-const LIVEKIT_API_KEY = process.env.LIVEKIT_API_KEY || '';
-const LIVEKIT_API_SECRET = process.env.LIVEKIT_API_SECRET || '';
+// Default LiveKit URL
+const DEFAULT_LIVEKIT_URL = process.env.LIVEKIT_URL || 'wss://tawasul-safqo3pu.livekit.cloud';
 
-// Create a Room Service Client for API calls
-let roomServiceClient: RoomServiceClient | null = null;
+// Cache for room service clients per account
+const roomServiceClients: Map<string, RoomServiceClient> = new Map();
 
-function getRoomServiceClient(): RoomServiceClient {
-  if (!roomServiceClient) {
-    if (!LIVEKIT_API_KEY || !LIVEKIT_API_SECRET) {
-      throw new Error('LiveKit API credentials are not configured');
+async function getLiveKitCredentials(accountId?: string): Promise<{ apiKey: string; apiSecret: string; url: string } | null> {
+  try {
+    // If accountId is provided, get that specific account
+    if (accountId) {
+      const account = await storage.getAccount(accountId);
+      if (account && account.isActive && account.service === 'livekit') {
+        // Decrypt the API key which should contain both key and secret in format "KEY:SECRET"
+        const decrypted = decrypt(account.encryptedApiKey);
+        const [apiKey, apiSecret] = decrypted.split(':');
+        if (apiKey && apiSecret) {
+          // Use URL from metadata if available, otherwise use default
+          const url = (account.metadata as any)?.url || DEFAULT_LIVEKIT_URL;
+          return { apiKey, apiSecret, url };
+        }
+      }
     }
-    // Extract host from WebSocket URL
-    const host = LIVEKIT_URL.replace('wss://', 'https://').replace('ws://', 'http://');
-    roomServiceClient = new RoomServiceClient(host, LIVEKIT_API_KEY, LIVEKIT_API_SECRET);
+    
+    // Otherwise, get the first active LiveKit account
+    const accounts = await storage.getAccountsByService('livekit');
+    const activeAccount = accounts.find(a => a.isActive);
+    if (activeAccount) {
+      const decrypted = decrypt(activeAccount.encryptedApiKey);
+      const [apiKey, apiSecret] = decrypted.split(':');
+      if (apiKey && apiSecret) {
+        const url = (activeAccount.metadata as any)?.url || DEFAULT_LIVEKIT_URL;
+        return { apiKey, apiSecret, url };
+      }
+    }
+
+    // Fallback to environment variables
+    const envKey = process.env.LIVEKIT_API_KEY;
+    const envSecret = process.env.LIVEKIT_API_SECRET;
+    if (envKey && envSecret) {
+      return { apiKey: envKey, apiSecret: envSecret, url: DEFAULT_LIVEKIT_URL };
+    }
+
+    return null;
+  } catch (error) {
+    console.error('Failed to get LiveKit credentials:', error);
+    return null;
   }
-  return roomServiceClient;
+}
+
+async function getRoomServiceClient(accountId?: string): Promise<RoomServiceClient> {
+  const cacheKey = accountId || 'default';
+  
+  // Check cache first
+  const cached = roomServiceClients.get(cacheKey);
+  if (cached) {
+    return cached;
+  }
+  
+  const credentials = await getLiveKitCredentials(accountId);
+  if (!credentials) {
+    throw new Error('LiveKit API credentials are not configured');
+  }
+  
+  // Extract host from WebSocket URL
+  const host = credentials.url.replace('wss://', 'https://').replace('ws://', 'http://');
+  const client = new RoomServiceClient(host, credentials.apiKey, credentials.apiSecret);
+  
+  // Cache the client
+  roomServiceClients.set(cacheKey, client);
+  
+  return client;
 }
 
 export interface LiveKitRoom {
@@ -59,13 +114,15 @@ export interface LiveKitMetrics {
 export async function createAccessToken(
   roomName: string,
   participantIdentity: string,
-  participantName?: string
+  participantName?: string,
+  accountId?: string
 ): Promise<string> {
-  if (!LIVEKIT_API_KEY || !LIVEKIT_API_SECRET) {
+  const credentials = await getLiveKitCredentials(accountId);
+  if (!credentials) {
     throw new Error('LiveKit API credentials are not configured');
   }
 
-  const token = new AccessToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET, {
+  const token = new AccessToken(credentials.apiKey, credentials.apiSecret, {
     identity: participantIdentity,
     name: participantName,
   });
@@ -85,9 +142,9 @@ export async function createAccessToken(
 /**
  * Fetch all active rooms
  */
-export async function getActiveRooms(): Promise<LiveKitRoom[]> {
+export async function getActiveRooms(accountId?: string): Promise<LiveKitRoom[]> {
   try {
-    const client = getRoomServiceClient();
+    const client = await getRoomServiceClient(accountId);
     const rooms = await client.listRooms();
     
     return rooms.map(room => ({
@@ -109,9 +166,9 @@ export async function getActiveRooms(): Promise<LiveKitRoom[]> {
 /**
  * Get participants in a specific room
  */
-export async function getRoomParticipants(roomName: string): Promise<LiveKitParticipant[]> {
+export async function getRoomParticipants(roomName: string, accountId?: string): Promise<LiveKitParticipant[]> {
   try {
-    const client = getRoomServiceClient();
+    const client = await getRoomServiceClient(accountId);
     const participants = await client.listParticipants(roomName);
     
     return participants.map(participant => ({
@@ -131,9 +188,9 @@ export async function getRoomParticipants(roomName: string): Promise<LiveKitPart
 /**
  * Get detailed metrics about LiveKit usage
  */
-export async function getLiveKitMetrics(): Promise<LiveKitMetrics> {
+export async function getLiveKitMetrics(accountId?: string): Promise<LiveKitMetrics> {
   try {
-    const rooms = await getActiveRooms();
+    const rooms = await getActiveRooms(accountId);
     
     const totalParticipants = rooms.reduce((sum, room) => sum + room.numParticipants, 0);
     const activeRooms = rooms.filter(room => room.numParticipants > 0);
@@ -184,10 +241,11 @@ export async function createRoom(
   roomName: string,
   emptyTimeout?: number,
   maxParticipants?: number,
-  metadata?: string
+  metadata?: string,
+  accountId?: string
 ): Promise<Room> {
   try {
-    const client = getRoomServiceClient();
+    const client = await getRoomServiceClient(accountId);
     const room = await client.createRoom({
       name: roomName,
       emptyTimeout: emptyTimeout || 300, // 5 minutes default
@@ -204,9 +262,9 @@ export async function createRoom(
 /**
  * Delete a room
  */
-export async function deleteRoom(roomName: string): Promise<void> {
+export async function deleteRoom(roomName: string, accountId?: string): Promise<void> {
   try {
-    const client = getRoomServiceClient();
+    const client = await getRoomServiceClient(accountId);
     await client.deleteRoom(roomName);
   } catch (error) {
     console.error(`Error deleting room ${roomName}:`, error);
@@ -217,9 +275,9 @@ export async function deleteRoom(roomName: string): Promise<void> {
 /**
  * Remove a participant from a room
  */
-export async function removeParticipant(roomName: string, participantIdentity: string): Promise<void> {
+export async function removeParticipant(roomName: string, participantIdentity: string, accountId?: string): Promise<void> {
   try {
-    const client = getRoomServiceClient();
+    const client = await getRoomServiceClient(accountId);
     await client.removeParticipant(roomName, participantIdentity);
   } catch (error) {
     console.error(`Error removing participant ${participantIdentity} from room ${roomName}:`, error);
@@ -230,23 +288,25 @@ export async function removeParticipant(roomName: string, participantIdentity: s
 /**
  * Check if LiveKit is properly configured
  */
-export function isLiveKitConfigured(): boolean {
-  return !!(LIVEKIT_URL && LIVEKIT_API_KEY && LIVEKIT_API_SECRET);
+export async function isLiveKitConfigured(accountId?: string): Promise<boolean> {
+  const credentials = await getLiveKitCredentials(accountId);
+  return !!credentials;
 }
 
 /**
  * Get LiveKit configuration status
  */
-export function getLiveKitStatus(): {
+export async function getLiveKitStatus(accountId?: string): Promise<{
   configured: boolean;
   url: string;
   hasApiKey: boolean;
   hasApiSecret: boolean;
-} {
+}> {
+  const credentials = await getLiveKitCredentials(accountId);
   return {
-    configured: isLiveKitConfigured(),
-    url: LIVEKIT_URL,
-    hasApiKey: !!LIVEKIT_API_KEY,
-    hasApiSecret: !!LIVEKIT_API_SECRET,
+    configured: !!credentials,
+    url: credentials?.url || DEFAULT_LIVEKIT_URL,
+    hasApiKey: !!credentials?.apiKey,
+    hasApiSecret: !!credentials?.apiSecret,
   };
 }

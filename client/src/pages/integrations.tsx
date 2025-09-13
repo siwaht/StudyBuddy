@@ -1,15 +1,14 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Key, Check, X, AlertCircle, Calendar, Activity } from "lucide-react";
+import { Key, Check, X, AlertCircle, Calendar, Activity, Plus } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -18,100 +17,163 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 
-interface Integration {
-  service: string;
+interface Account {
+  id: string;
+  name: string;
+  service: 'elevenlabs' | 'livekit';
   isActive: boolean;
-  lastUsed: string | null;
-  updatedAt: string | null;
+  lastSynced: string | null;
+  metadata: any;
+  createdAt: string;
+  updatedAt: string;
   hasKey: boolean;
 }
 
 export default function Integrations() {
-  const [selectedService, setSelectedService] = useState<string | null>(null);
-  const [apiKey, setApiKey] = useState("");
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isUpdateDialogOpen, setIsUpdateDialogOpen] = useState(false);
+  const [selectedAccount, setSelectedAccount] = useState<Account | null>(null);
+  const [accountName, setAccountName] = useState("");
+  const [selectedService, setSelectedService] = useState<'elevenlabs' | 'livekit' | ''>("");
+  const [apiKey, setApiKey] = useState("");
+  const [isActive, setIsActive] = useState(true);
   const { toast } = useToast();
 
-  const { data: integrations, isLoading } = useQuery<Integration[]>({
-    queryKey: ["/api/integrations"],
+  const { data: accounts, isLoading } = useQuery<Account[]>({
+    queryKey: ["/api/accounts"],
   });
 
-  const updateApiKeyMutation = useMutation({
-    mutationFn: async ({ service, apiKey }: { service: string; apiKey: string }) => {
-      const response = await apiRequest("PUT", `/api/integrations/${service}`, { apiKey });
+  const createAccountMutation = useMutation({
+    mutationFn: async ({ name, service, apiKey }: { name: string; service: string; apiKey: string }) => {
+      const response = await apiRequest("POST", `/api/accounts`, { name, service, apiKey });
       return response.json();
     },
-    onSuccess: (data, variables) => {
+    onSuccess: (data) => {
       toast({
         title: "Success",
-        description: `API key for ${variables.service} has been updated successfully.`,
+        description: `Account "${data.account.name}" has been created successfully.`,
+      });
+      setIsCreateDialogOpen(false);
+      resetForm();
+      queryClient.invalidateQueries({ queryKey: ["/api/accounts"] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to create account",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const updateAccountMutation = useMutation({
+    mutationFn: async ({ id, name, apiKey, isActive }: { id: string; name?: string; apiKey?: string; isActive?: boolean }) => {
+      const response = await apiRequest("PUT", `/api/accounts/${id}`, { name, apiKey, isActive });
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Success",
+        description: "Account has been updated successfully.",
       });
       setIsUpdateDialogOpen(false);
-      setApiKey("");
-      setSelectedService(null);
-      queryClient.invalidateQueries({ queryKey: ["/api/integrations"] });
+      resetForm();
+      queryClient.invalidateQueries({ queryKey: ["/api/accounts"] });
     },
     onError: (error: any) => {
       toast({
         title: "Error",
-        description: error.message || "Failed to update API key",
+        description: error.message || "Failed to update account",
         variant: "destructive",
       });
     },
   });
 
-  const deleteApiKeyMutation = useMutation({
-    mutationFn: async (service: string) => {
-      const response = await apiRequest("DELETE", `/api/integrations/${service}`);
+  const deleteAccountMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const response = await apiRequest("DELETE", `/api/accounts/${id}`);
       return response.json();
     },
-    onSuccess: (data, service) => {
+    onSuccess: () => {
       toast({
         title: "Success",
-        description: `API key for ${service} has been removed.`,
+        description: "Account has been removed.",
       });
-      queryClient.invalidateQueries({ queryKey: ["/api/integrations"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/accounts"] });
     },
     onError: (error: any) => {
       toast({
         title: "Error",
-        description: error.message || "Failed to delete API key",
+        description: error.message || "Failed to delete account",
         variant: "destructive",
       });
     },
   });
 
-  const handleUpdateKey = (service: string) => {
-    setSelectedService(service);
+  const resetForm = () => {
+    setAccountName("");
+    setSelectedService("");
     setApiKey("");
+    setIsActive(true);
+    setSelectedAccount(null);
+  };
+
+  const handleCreateAccount = () => {
+    resetForm();
+    setIsCreateDialogOpen(true);
+  };
+
+  const handleUpdateAccount = (account: Account) => {
+    setSelectedAccount(account);
+    setAccountName(account.name);
+    setApiKey("");
+    setIsActive(account.isActive);
     setIsUpdateDialogOpen(true);
   };
 
-  const handleSubmitKey = () => {
-    if (!selectedService || !apiKey.trim()) return;
-    updateApiKeyMutation.mutate({ service: selectedService, apiKey });
+  const handleSubmitCreate = () => {
+    if (!accountName.trim() || !selectedService || !apiKey.trim()) return;
+    createAccountMutation.mutate({ name: accountName, service: selectedService, apiKey });
+  };
+
+  const handleSubmitUpdate = () => {
+    if (!selectedAccount) return;
+    const updates: any = { id: selectedAccount.id };
+    
+    if (accountName && accountName !== selectedAccount.name) {
+      updates.name = accountName;
+    }
+    if (apiKey.trim()) {
+      updates.apiKey = apiKey;
+    }
+    if (isActive !== selectedAccount.isActive) {
+      updates.isActive = isActive;
+    }
+    
+    updateAccountMutation.mutate(updates);
   };
 
   const getServiceInfo = (service: string) => {
-    const info: Record<string, { name: string; description: string; docsUrl: string }> = {
+    const info: Record<string, { name: string; description: string }> = {
       elevenlabs: {
         name: "ElevenLabs",
         description: "High-quality AI voice synthesis and conversational AI agents",
-        docsUrl: "https://elevenlabs.io/docs/api-reference",
       },
       livekit: {
         name: "LiveKit",
         description: "Real-time audio and video streaming infrastructure",
-        docsUrl: "https://docs.livekit.io",
-      },
-      openai: {
-        name: "OpenAI",
-        description: "Advanced language models and AI capabilities",
-        docsUrl: "https://platform.openai.com/docs",
       },
     };
-    return info[service] || { name: service, description: "", docsUrl: "" };
+    return info[service] || { name: service, description: "" };
   };
 
   const formatDate = (dateString: string | null) => {
@@ -142,128 +204,179 @@ export default function Integrations() {
     );
   }
 
+  const elevenLabsAccounts = accounts?.filter(a => a.service === 'elevenlabs') || [];
+  const liveKitAccounts = accounts?.filter(a => a.service === 'livekit') || [];
+
   return (
     <div className="space-y-6 p-6" data-testid="integrations-page">
-      <div>
-        <h1 className="text-2xl font-bold">Integrations</h1>
-        <p className="text-muted-foreground">
-          Manage API keys and configurations for external services
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">Service Accounts</h1>
+          <p className="text-muted-foreground">
+            Manage API accounts for external services
+          </p>
+        </div>
+        <Button onClick={handleCreateAccount} data-testid="button-create-account">
+          <Plus className="h-4 w-4 mr-2" />
+          Add Account
+        </Button>
       </div>
 
       <Alert>
         <AlertCircle className="h-4 w-4" />
         <AlertDescription>
-          API keys are encrypted and stored securely. Only administrators can manage integrations.
+          API keys are encrypted and stored securely. You can add multiple accounts for each service.
         </AlertDescription>
       </Alert>
 
-      <div className="grid gap-6">
-        {integrations?.map((integration) => {
-          const info = getServiceInfo(integration.service);
+      {/* Service Overview */}
+      <div className="grid gap-4 md:grid-cols-2">
+        {(['elevenlabs', 'livekit'] as const).map((service) => {
+          const info = getServiceInfo(service);
+          const serviceAccounts = service === 'elevenlabs' ? elevenLabsAccounts : liveKitAccounts;
+          const activeCount = serviceAccounts.filter(a => a.isActive).length;
+          
           return (
-            <Card key={integration.service} data-testid={`integration-card-${integration.service}`}>
+            <Card key={service} data-testid={`service-card-${service}`}>
               <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <CardTitle className="text-lg">{info.name}</CardTitle>
-                    {integration.hasKey ? (
-                      integration.isActive ? (
-                        <Badge className="bg-green-100 text-green-800">
-                          <Check className="h-3 w-3 mr-1" />
-                          Connected
-                        </Badge>
-                      ) : (
-                        <Badge variant="secondary">
-                          <AlertCircle className="h-3 w-3 mr-1" />
-                          Inactive
-                        </Badge>
-                      )
-                    ) : (
-                      <Badge variant="outline">
-                        <X className="h-3 w-3 mr-1" />
-                        Not Configured
-                      </Badge>
-                    )}
-                  </div>
-                  <div className="flex gap-2">
-                    {integration.hasKey && (
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        onClick={() => deleteApiKeyMutation.mutate(integration.service)}
-                        data-testid={`button-remove-${integration.service}`}
-                      >
-                        Remove
-                      </Button>
-                    )}
-                    <Button
-                      variant={integration.hasKey ? "outline" : "default"}
-                      size="sm"
-                      onClick={() => handleUpdateKey(integration.service)}
-                      data-testid={`button-configure-${integration.service}`}
-                    >
-                      <Key className="h-4 w-4 mr-2" />
-                      {integration.hasKey ? "Update Key" : "Add Key"}
-                    </Button>
-                  </div>
-                </div>
+                <CardTitle className="text-lg">{info.name}</CardTitle>
                 <CardDescription>{info.description}</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div className="flex items-center gap-2 text-muted-foreground">
-                    <Calendar className="h-4 w-4" />
-                    <span>Last Updated:</span>
-                    <span className="font-medium text-foreground">
-                      {formatDate(integration.updatedAt)}
-                    </span>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">Total Accounts:</span>
+                    <span className="font-medium">{serviceAccounts.length}</span>
                   </div>
-                  <div className="flex items-center gap-2 text-muted-foreground">
-                    <Activity className="h-4 w-4" />
-                    <span>Last Used:</span>
-                    <span className="font-medium text-foreground">
-                      {formatDate(integration.lastUsed)}
-                    </span>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">Active Accounts:</span>
+                    <span className="font-medium">{activeCount}</span>
                   </div>
                 </div>
-                {info.docsUrl && (
-                  <div className="mt-4">
-                    <a
-                      href={info.docsUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-sm text-primary hover:underline"
-                    >
-                      View API Documentation →
-                    </a>
-                  </div>
-                )}
               </CardContent>
             </Card>
           );
         })}
       </div>
 
-      <Dialog open={isUpdateDialogOpen} onOpenChange={setIsUpdateDialogOpen}>
+      {/* Accounts List */}
+      <div className="space-y-4">
+        <h2 className="text-lg font-semibold">Configured Accounts</h2>
+        
+        {accounts && accounts.length > 0 ? (
+          <div className="grid gap-4">
+            {accounts.map((account) => {
+              const info = getServiceInfo(account.service);
+              return (
+                <Card key={account.id} data-testid={`account-card-${account.id}`}>
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-4">
+                        <div>
+                          <CardTitle className="text-base">{account.name}</CardTitle>
+                          <p className="text-sm text-muted-foreground">{info.name}</p>
+                        </div>
+                        {account.isActive ? (
+                          <Badge className="bg-green-100 text-green-800">
+                            <Check className="h-3 w-3 mr-1" />
+                            Active
+                          </Badge>
+                        ) : (
+                          <Badge variant="secondary">
+                            <X className="h-3 w-3 mr-1" />
+                            Inactive
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleUpdateAccount(account)}
+                          data-testid={`button-edit-${account.id}`}
+                        >
+                          Edit
+                        </Button>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => deleteAccountMutation.mutate(account.id)}
+                          data-testid={`button-remove-${account.id}`}
+                        >
+                          Remove
+                        </Button>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                      <div className="flex items-center gap-2 text-muted-foreground">
+                        <Calendar className="h-4 w-4" />
+                        <span>Created:</span>
+                        <span className="font-medium text-foreground">
+                          {formatDate(account.createdAt)}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 text-muted-foreground">
+                        <Activity className="h-4 w-4" />
+                        <span>Last Synced:</span>
+                        <span className="font-medium text-foreground">
+                          {formatDate(account.lastSynced)}
+                        </span>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        ) : (
+          <Card>
+            <CardContent className="py-8 text-center text-muted-foreground">
+              No accounts configured yet. Click "Add Account" to get started.
+            </CardContent>
+          </Card>
+        )}
+      </div>
+
+      {/* Create Account Dialog */}
+      <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>
-              {selectedService && 
-                `${integrations?.find(i => i.service === selectedService)?.hasKey ? 'Update' : 'Add'} ${getServiceInfo(selectedService).name} API Key`
-              }
-            </DialogTitle>
+            <DialogTitle>Add Service Account</DialogTitle>
             <DialogDescription>
-              Enter your API key below. It will be encrypted and stored securely.
+              Create a new API account for an external service.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="account-name">Account Name</Label>
+              <Input
+                id="account-name"
+                placeholder="e.g., Production ElevenLabs"
+                value={accountName}
+                onChange={(e) => setAccountName(e.target.value)}
+                data-testid="input-account-name"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="service">Service</Label>
+              <Select value={selectedService} onValueChange={(value: any) => setSelectedService(value)}>
+                <SelectTrigger id="service" data-testid="select-service">
+                  <SelectValue placeholder="Select a service" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="elevenlabs">ElevenLabs</SelectItem>
+                  <SelectItem value="livekit">LiveKit</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <div className="grid gap-2">
               <Label htmlFor="api-key">API Key</Label>
               <Input
                 id="api-key"
                 type="password"
-                placeholder="Enter your API key..."
+                placeholder={selectedService === 'livekit' ? "Format: apiKey:apiSecret" : "Enter your API key..."}
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
                 data-testid="input-api-key"
@@ -290,7 +403,7 @@ export default function Integrations() {
               <Alert>
                 <AlertCircle className="h-4 w-4" />
                 <AlertDescription>
-                  You need both an API key and secret for LiveKit. Enter them as "key:secret".
+                  Enter your LiveKit credentials in the format: "apiKey:apiSecret"
                 </AlertDescription>
               </Alert>
             )}
@@ -299,19 +412,79 @@ export default function Integrations() {
             <Button
               variant="outline"
               onClick={() => {
-                setIsUpdateDialogOpen(false);
-                setApiKey("");
-                setSelectedService(null);
+                setIsCreateDialogOpen(false);
+                resetForm();
               }}
             >
               Cancel
             </Button>
             <Button
-              onClick={handleSubmitKey}
-              disabled={!apiKey.trim() || updateApiKeyMutation.isPending}
-              data-testid="button-save-api-key"
+              onClick={handleSubmitCreate}
+              disabled={!accountName.trim() || !selectedService || !apiKey.trim() || createAccountMutation.isPending}
+              data-testid="button-save-account"
             >
-              {updateApiKeyMutation.isPending ? "Saving..." : "Save Key"}
+              {createAccountMutation.isPending ? "Creating..." : "Create Account"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Update Account Dialog */}
+      <Dialog open={isUpdateDialogOpen} onOpenChange={setIsUpdateDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Update Account</DialogTitle>
+            <DialogDescription>
+              Update account details or API key.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="update-account-name">Account Name</Label>
+              <Input
+                id="update-account-name"
+                value={accountName}
+                onChange={(e) => setAccountName(e.target.value)}
+                data-testid="input-update-account-name"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="update-api-key">API Key (leave blank to keep current)</Label>
+              <Input
+                id="update-api-key"
+                type="password"
+                placeholder={selectedAccount?.service === 'livekit' ? "Format: apiKey:apiSecret" : "Enter new API key..."}
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                data-testid="input-update-api-key"
+              />
+            </div>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="account-active">Account Active</Label>
+              <Switch
+                id="account-active"
+                checked={isActive}
+                onCheckedChange={setIsActive}
+                data-testid="switch-account-active"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setIsUpdateDialogOpen(false);
+                resetForm();
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSubmitUpdate}
+              disabled={updateAccountMutation.isPending}
+              data-testid="button-update-account"
+            >
+              {updateAccountMutation.isPending ? "Updating..." : "Update Account"}
             </Button>
           </DialogFooter>
         </DialogContent>
