@@ -127,6 +127,30 @@ export default function Agents() {
     },
   });
 
+  const importAllAgentsMutation = useMutation({
+    mutationFn: async ({ platform, accountId }: { platform: string; accountId: string }) => {
+      const response = await apiRequest("POST", "/api/agents/import-all", { platform, accountId });
+      return response.json();
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Import Complete",
+        description: `${data.imported} agents imported successfully${data.failed > 0 ? `, ${data.failed} failed` : ''}`,
+      });
+      setIsImportAgentOpen(false);
+      setImportForm({ platform: "elevenlabs", agentId: "", accountId: "" });
+      setSearchedAgent(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/agents"] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to import agents",
+        variant: "destructive",
+      });
+    },
+  });
+
   const toggleAgentStatusMutation = useMutation({
     mutationFn: async ({ agentId, isActive }: { agentId: string; isActive: boolean }) => {
       const response = await apiRequest("PATCH", `/api/agents/${agentId}`, { isActive });
@@ -209,6 +233,21 @@ export default function Agents() {
   const handleImportAgent = () => {
     if (!searchedAgent) return;
     importAgentMutation.mutate(importForm);
+  };
+
+  const handleImportAllAgents = () => {
+    if (!importForm.accountId) {
+      toast({
+        title: "Error",
+        description: "Please select an account",
+        variant: "destructive",
+      });
+      return;
+    }
+    importAllAgentsMutation.mutate({ 
+      platform: importForm.platform,
+      accountId: importForm.accountId 
+    });
   };
 
   const handleDeleteAgent = () => {
@@ -545,7 +584,7 @@ export default function Agents() {
               </>
             )}
           </div>
-          <DialogFooter>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
             <Button
               variant="outline"
               onClick={() => {
@@ -556,6 +595,14 @@ export default function Agents() {
               data-testid="button-cancel-import"
             >
               Cancel
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={handleImportAllAgents}
+              disabled={!importForm.accountId || importAllAgentsMutation.isPending}
+              data-testid="button-import-all-agents"
+            >
+              {importAllAgentsMutation.isPending ? "Importing All..." : "Import All Agents"}
             </Button>
             <Button
               onClick={handleImportAgent}

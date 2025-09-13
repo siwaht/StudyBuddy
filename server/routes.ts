@@ -1022,8 +1022,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         isActive: true,
       });
       
-      // Assign the agent to the current user
-      await storage.assignAgents(req.user!.id, [newAgent.id]);
+      // Add the agent to the current user's assignments
+      await storage.addAgentsToUser(req.user!.id, [newAgent.id]);
       
       res.status(201).json(newAgent);
     } catch (error: any) {
@@ -1036,21 +1036,136 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/agents/list-external", requireAuth, async (req: Request, res: Response) => {
     try {
-      const { platform } = req.query;
+      const { platform, accountId } = req.query;
       
       if (platform !== 'elevenlabs') {
         return res.status(400).json({ message: "Only ElevenLabs platform is currently supported" });
       }
       
-      // List all agents from ElevenLabs
-      const agents = await elevenLabsIntegration.listAgents(20);
+      // Verify account exists if provided
+      if (accountId) {
+        const account = await storage.getAccount(accountId as string);
+        if (!account) {
+          return res.status(404).json({ message: "Account not found" });
+        }
+        if (account.service !== platform) {
+          return res.status(400).json({ message: "Account service does not match platform" });
+        }
+      }
       
-      const parsedAgents = agents.map(agent => elevenLabsIntegration.parseAgentForImport(agent));
+      // List all agents from ElevenLabs
+      const agents = await elevenLabsIntegration.listAgents(100, accountId as string);
+      
+      // Get existing agents to filter out already imported ones
+      const existingAgents = await storage.getAllAgents(req.user!.id);
+      const existingExternalIds = existingAgents
+        .filter(a => a.platform === 'elevenlabs')
+        .map(a => a.externalId);
+      
+      const parsedAgents = agents
+        .filter(agent => !existingExternalIds.includes(agent.agent_id))
+        .map(agent => elevenLabsIntegration.parseAgentForImport(agent));
+      
       res.json(parsedAgents);
     } catch (error: any) {
       console.error('Error listing external agents:', error);
       res.status(500).json({ 
         message: error.message || "Failed to list external agents" 
+      });
+    }
+  });
+  
+  // Import all agents endpoint
+  app.post("/api/agents/import-all", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { platform, accountId } = req.body;
+      
+      if (!platform) {
+        return res.status(400).json({ message: "Platform is required" });
+      }
+      
+      if (platform !== 'elevenlabs') {
+        return res.status(400).json({ message: "Only ElevenLabs platform is currently supported" });
+      }
+      
+      // Verify account exists if provided
+      if (accountId) {
+        const account = await storage.getAccount(accountId);
+        if (!account) {
+          return res.status(404).json({ message: "Account not found" });
+        }
+        if (account.service !== platform) {
+          return res.status(400).json({ message: "Account service does not match platform" });
+        }
+      }
+      
+      // List all agents from ElevenLabs
+      const externalAgents = await elevenLabsIntegration.listAgents(100, accountId);
+      
+      // Get existing agents to avoid duplicates
+      const existingAgents = await storage.getAllAgents(req.user!.id);
+      const existingExternalIds = existingAgents
+        .filter(a => a.platform === 'elevenlabs')
+        .map(a => a.externalId);
+      
+      // Filter out already imported agents
+      const agentsToImport = externalAgents.filter(
+        agent => !existingExternalIds.includes(agent.agent_id)
+      );
+      
+      if (agentsToImport.length === 0) {
+        return res.status(200).json({ 
+          message: "No new agents to import",
+          imported: 0
+        });
+      }
+      
+      const importedAgents = [];
+      const failedImports = [];
+      
+      for (const externalAgent of agentsToImport) {
+        try {
+          // Parse agent data
+          const agentData = elevenLabsIntegration.parseAgentForImport(externalAgent);
+          
+          // Create the agent
+          const newAgent = await storage.createAgent({
+            name: agentData.name,
+            platform: agentData.platform,
+            accountId: accountId || null,
+            externalId: agentData.externalId,
+            description: agentData.description,
+            metadata: agentData.metadata,
+            isActive: true,
+          });
+          
+          importedAgents.push(newAgent);
+        } catch (error: any) {
+          console.error(`Failed to import agent ${externalAgent.agent_id}:`, error);
+          failedImports.push({
+            agentId: externalAgent.agent_id,
+            name: externalAgent.name,
+            error: error.message
+          });
+        }
+      }
+      
+      // Add all imported agents to the user's assignments
+      if (importedAgents.length > 0) {
+        await storage.addAgentsToUser(req.user!.id, importedAgents.map(a => a.id));
+      }
+      
+      res.status(201).json({
+        message: `Successfully imported ${importedAgents.length} agents`,
+        imported: importedAgents.length,
+        failed: failedImports.length,
+        agents: importedAgents,
+        errors: failedImports
+      });
+    } catch (error: any) {
+      console.error('Error importing all agents:', error);
+      res.status(500).json({ 
+        message: error.message || "Failed to import agents" 
       });
     }
   });

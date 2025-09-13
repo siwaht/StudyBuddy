@@ -527,6 +527,25 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
+  async addAgentsToUser(userId: string, agentIds: string[]): Promise<void> {
+    // Get existing assignments
+    const existing = await db.select({ agentId: userAgents.agentId })
+      .from(userAgents)
+      .where(eq(userAgents.userId, userId));
+    
+    const existingIds = existing.map(e => e.agentId);
+    
+    // Filter out agents that are already assigned
+    const newAgentIds = agentIds.filter(id => !existingIds.includes(id));
+    
+    // Add new assignments
+    if (newAgentIds.length > 0) {
+      await db.insert(userAgents).values(
+        newAgentIds.map(agentId => ({ userId, agentId }))
+      );
+    }
+  }
+
   async removeAgentAssignment(userId: string, agentId: string): Promise<void> {
     await db.delete(userAgents)
       .where(and(
