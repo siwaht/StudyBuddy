@@ -168,6 +168,75 @@ class ElevenLabsService {
     }
   }
 
+  // Get audio recording for a conversation
+  async getConversationAudio(conversationId: string): Promise<Buffer | null> {
+    if (!this.apiKey) {
+      return null;
+    }
+
+    try {
+      // First, get the conversation details to find the history item ID
+      const conversation = await this.getConversation(conversationId);
+      if (!conversation) {
+        console.error(`Conversation ${conversationId} not found`);
+        return null;
+      }
+
+      // The conversation may contain a history_item_id or we need to construct it
+      // ElevenLabs typically stores audio with the conversation ID
+      // Try direct audio retrieval endpoint first
+      const audioUrl = `https://api.elevenlabs.io/v1/history/${conversationId}/audio`;
+      
+      const response = await fetch(audioUrl, {
+        method: "GET",
+        headers: {
+          "xi-api-key": this.apiKey,
+        },
+      });
+
+      if (!response.ok) {
+        // Try alternative endpoint for conversation audio
+        const altUrl = `https://api.elevenlabs.io/v1/convai/conversations/${conversationId}/audio`;
+        const altResponse = await fetch(altUrl, {
+          method: "GET",
+          headers: {
+            "xi-api-key": this.apiKey,
+          },
+        });
+        
+        if (!altResponse.ok) {
+          console.error(`Failed to fetch audio for conversation ${conversationId}`);
+          return null;
+        }
+        
+        const audioBuffer = await altResponse.arrayBuffer();
+        return Buffer.from(audioBuffer);
+      }
+
+      const audioBuffer = await response.arrayBuffer();
+      return Buffer.from(audioBuffer);
+    } catch (error) {
+      console.error(`Error fetching audio for conversation ${conversationId}:`, error);
+      return null;
+    }
+  }
+
+  // Get recording URL for a conversation (for streaming)
+  async getConversationRecordingUrl(conversationId: string): Promise<string | null> {
+    if (!this.apiKey) {
+      return null;
+    }
+
+    try {
+      // Generate a streaming URL for the audio
+      // This returns a URL that can be used directly in audio players
+      return `https://api.elevenlabs.io/v1/history/${conversationId}/audio?xi-api-key=${this.apiKey}`;
+    } catch (error) {
+      console.error(`Error generating recording URL for conversation ${conversationId}:`, error);
+      return null;
+    }
+  }
+
   // Initiate outbound call via Twilio
   async initiateOutboundCallTwilio(params: {
     agentId: string;

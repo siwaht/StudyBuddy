@@ -483,7 +483,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const agents = await storage.getAllAgents(req.user!.id);
       const agentsMap = new Map(agents.map(agent => [agent.id, agent]));
       
-      const callsWithAgents = calls.map(call => ({
+      // Add recording URLs for ElevenLabs conversations
+      const callsWithRecordings = await Promise.all(calls.map(async (call) => {
+        // For ElevenLabs conversations, generate recording URL if not already present
+        if (call.id.startsWith('EL-') && !call.recordingUrl) {
+          const conversationId = call.id.replace('EL-', '');
+          // Generate a direct streaming URL for the recording
+          const recordingUrl = elevenlabsService.isConfigured() 
+            ? await elevenlabsService.getConversationRecordingUrl(conversationId)
+            : null;
+          return {
+            ...call,
+            recordingUrl: recordingUrl || call.recordingUrl
+          };
+        }
+        return call;
+      }));
+      
+      const callsWithAgents = callsWithRecordings.map(call => ({
         ...call,
         agent: agentsMap.get(call.agentId),
       }));
@@ -590,8 +607,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Get performance metrics (filtered for user's access)
       const metrics = await storage.getPerformanceMetricsByCall(req.user!.id, call.id);
       
+      // Add recording URL for ElevenLabs conversations if not present
+      let recordingUrl = call.recordingUrl;
+      if (call.id.startsWith('EL-') && !recordingUrl && elevenlabsService.isConfigured()) {
+        const conversationId = call.id.replace('EL-', '');
+        recordingUrl = await elevenlabsService.getConversationRecordingUrl(conversationId);
+      }
+      
       res.json({
         ...call,
+        recordingUrl,
         agent,
         metrics,
       });
