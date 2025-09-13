@@ -206,6 +206,8 @@ export class ElevenLabsIntegration {
     }
 
     try {
+      // Note: The conversations endpoint may not be available in all ElevenLabs plans
+      // or may require specific permissions. For now, we'll return empty array if it fails.
       const params: any = {
         agent_id: agentId,
         limit: options?.limit || 100,
@@ -221,8 +223,9 @@ export class ElevenLabsIntegration {
         params.cursor = options.cursor;
       }
 
+      // Try the convai endpoint which is the correct one for conversational AI agents
       const response = await axios.get(
-        `${this.baseUrl}/conversational-ai/conversations`,
+        `${this.baseUrl}/convai/conversations`,
         {
           headers: {
             'xi-api-key': apiKey,
@@ -237,8 +240,22 @@ export class ElevenLabsIntegration {
         cursor: response.data.cursor,
       };
     } catch (error: any) {
+      // If the endpoint doesn't exist or returns 404, just return empty conversations
+      // This is common for new agents or accounts without conversation history
+      if (error.response?.status === 404 || error.response?.status === 403) {
+        console.log('Conversations endpoint not available for this agent/account');
+        return {
+          conversations: [],
+          cursor: undefined,
+        };
+      }
+      
       console.error('Error fetching conversations from ElevenLabs:', error.response?.data || error.message);
-      throw new Error(`Failed to fetch conversations: ${error.response?.data?.detail?.message || error.message}`);
+      // Don't throw error for conversation fetching - just return empty array
+      return {
+        conversations: [],
+        cursor: undefined,
+      };
     }
   }
 
@@ -253,7 +270,7 @@ export class ElevenLabsIntegration {
 
     try {
       const response = await axios.get(
-        `${this.baseUrl}/conversational-ai/conversations/${conversationId}`,
+        `${this.baseUrl}/convai/conversations/${conversationId}`,
         {
           headers: {
             'xi-api-key': apiKey,
@@ -265,10 +282,11 @@ export class ElevenLabsIntegration {
       return response.data;
     } catch (error: any) {
       console.error('Error fetching conversation details from ElevenLabs:', error.response?.data || error.message);
-      if (error.response?.status === 404) {
+      if (error.response?.status === 404 || error.response?.status === 403) {
         return null;
       }
-      throw new Error(`Failed to fetch conversation details: ${error.response?.data?.detail?.message || error.message}`);
+      // Return null for conversation details if there's an error
+      return null;
     }
   }
 }

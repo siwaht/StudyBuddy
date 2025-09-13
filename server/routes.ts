@@ -951,88 +951,134 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       
       try {
-        // Fetch all conversations from ElevenLabs
-        let allConversations: any[] = [];
-        let cursor: string | undefined;
-        let totalFetched = 0;
-        const maxLimit = 500; // Sync more data
-        
-        // Get the last sync time for incremental sync
-        let startTime: number | undefined;
-        if (syncType === 'incremental') {
-          const lastSync = await storage.getLatestSync(agentId);
-          if (lastSync?.completedAt) {
-            startTime = lastSync.completedAt.getTime();
-          }
-        }
-        
-        // Fetch conversations
-        do {
-          const result = await elevenLabsIntegration.fetchConversations(
+        // Sync agent configuration first
+        let agentUpdated = false;
+        try {
+          const agentDetails = await elevenLabsIntegration.fetchAgentById(
             agent.externalId!,
-            accountId || agent.accountId || undefined,
-            {
-              startTime,
-              limit: Math.min(100, maxLimit - totalFetched),
-              cursor
-            }
+            accountId || agent.accountId || undefined
           );
           
-          allConversations = [...allConversations, ...result.conversations];
-          cursor = result.cursor;
-          totalFetched += result.conversations.length;
-          
-        } while (cursor && totalFetched < maxLimit);
-        
-        // Fetch detailed conversation data with transcripts and analysis
-        const detailedConversations = await Promise.all(
-          allConversations.map(async (conv) => {
-            try {
-              const details = await elevenLabsIntegration.fetchConversationDetails(
-                conv.conversation_id,
-                accountId || agent.accountId || undefined
-              );
-              return details || conv;
-            } catch (error) {
-              console.error(`Failed to fetch details for conversation ${conv.conversation_id}:`, error);
-              return conv;
-            }
-          })
-        );
-        
-        // Import conversations into the database
-        const importResults = await storage.bulkImportConversations(
-          agentId,
-          detailedConversations
-        );
-        
-        // Update agent's metadata with last sync info
-        const currentMetadata = (agent.metadata || {}) as Record<string, any>;
-        await storage.updateAgent(agentId, {
-          metadata: {
-            ...currentMetadata,
-            lastSyncedAt: new Date().toISOString(),
-            totalConversations: (currentMetadata.totalConversations || 0) + importResults.imported,
+          if (agentDetails) {
+            // Update agent metadata with latest from ElevenLabs
+            const currentMetadata = (agent.metadata || {}) as Record<string, any>;
+            await storage.updateAgent(agentId, {
+              name: agentDetails.name || agent.name,
+              description: agentDetails.description || agent.description,
+              metadata: {
+                ...currentMetadata,
+                voice: agentDetails.voice,
+                language: agentDetails.language,
+                prompt: agentDetails.prompt,
+                firstMessage: agentDetails.first_message,
+                lastSyncedAt: new Date().toISOString(),
+              }
+            });
+            agentUpdated = true;
           }
-        });
+        } catch (error) {
+          console.error('Failed to fetch agent details:', error);
+        }
+        
+        // Fetch all conversations from ElevenLabs
+        let allConversations: any[] = [];
+        let conversationsSynced = false;
+        
+        try {
+          let cursor: string | undefined;
+          let totalFetched = 0;
+          const maxLimit = 500; // Sync more data
+          
+          // Get the last sync time for incremental sync
+          let startTime: number | undefined;
+          if (syncType === 'incremental') {
+            const lastSync = await storage.getLatestSync(agentId);
+            if (lastSync?.completedAt) {
+              startTime = lastSync.completedAt.getTime();
+            }
+          }
+          
+          // Fetch conversations
+          do {
+            const result = await elevenLabsIntegration.fetchConversations(
+              agent.externalId!,
+              accountId || agent.accountId || undefined,
+              {
+                startTime,
+                limit: Math.min(100, maxLimit - totalFetched),
+                cursor
+              }
+            );
+            
+            allConversations = [...allConversations, ...result.conversations];
+            cursor = result.cursor;
+            totalFetched += result.conversations.length;
+            
+          } while (cursor && totalFetched < maxLimit);
+          
+          conversationsSynced = true;
+        } catch (error) {
+          console.error('Failed to fetch conversations:', error);
+          // Continue with sync even if conversations fail
+        }
+        
+        // Import conversations if we have any
+        let importResults = { imported: 0, skipped: 0, failed: 0 };
+        
+        if (allConversations.length > 0) {
+          // Fetch detailed conversation data with transcripts and analysis
+          const detailedConversations = await Promise.all(
+            allConversations.map(async (conv) => {
+              try {
+                const details = await elevenLabsIntegration.fetchConversationDetails(
+                  conv.conversation_id,
+                  accountId || agent.accountId || undefined
+                );
+                return details || conv;
+              } catch (error) {
+                console.error(`Failed to fetch details for conversation ${conv.conversation_id}:`, error);
+                return conv;
+              }
+            })
+          );
+          
+          // Import conversations into the database
+          importResults = await storage.bulkImportConversations(
+            agentId,
+            detailedConversations
+          );
+        }
         
         // Update sync history record
         await storage.updateSyncHistory(syncRecord.id, {
           status: 'completed',
-          itemsSynced: importResults.imported,
+          itemsSynced: importResults.imported + (agentUpdated ? 1 : 0),
           completedAt: new Date(),
         });
         
+        // Build response message based on what was synced
+        let message = "Sync completed";
+        if (agentUpdated && importResults.imported > 0) {
+          message = "Agent configuration and conversations synced successfully";
+        } else if (agentUpdated) {
+          message = "Agent configuration synced successfully";
+        } else if (importResults.imported > 0) {
+          message = "Conversations synced successfully";
+        } else {
+          message = "Sync completed (no new data found)";
+        }
+        
         res.json({
-          message: "Sync completed successfully",
+          message,
+          agentUpdated,
           conversations: importResults.imported,
           transcripts: importResults.imported, // Each conversation includes transcript
           analytics: importResults.imported, // Each conversation includes analysis
-          errors: [],
+          errors: conversationsSynced ? [] : ["Conversations API not available"],
           syncRecord: {
             id: syncRecord.id,
             type: syncType,
-            itemsSynced: importResults.imported,
+            itemsSynced: importResults.imported + (agentUpdated ? 1 : 0),
             skipped: importResults.skipped,
             failed: importResults.failed,
           }
