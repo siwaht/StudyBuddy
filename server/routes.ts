@@ -1136,6 +1136,143 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Phone Numbers Routes
+  app.get("/api/phone-numbers", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const phoneNumbers = await storage.getAllPhoneNumbers();
+      res.json(phoneNumbers);
+    } catch (error: any) {
+      console.error('Error fetching phone numbers:', error);
+      res.status(500).json({ 
+        message: "Failed to fetch phone numbers",
+        error: error.message 
+      });
+    }
+  });
+  
+  app.get("/api/phone-numbers/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const phoneNumber = await storage.getPhoneNumber(id);
+      
+      if (!phoneNumber) {
+        return res.status(404).json({ message: "Phone number not found" });
+      }
+      
+      res.json(phoneNumber);
+    } catch (error: any) {
+      console.error('Error fetching phone number:', error);
+      res.status(500).json({ 
+        message: "Failed to fetch phone number",
+        error: error.message 
+      });
+    }
+  });
+  
+  app.post("/api/phone-numbers", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { number, provider, agentId, configuration, isActive } = req.body;
+      
+      // Validate provider
+      if (provider !== 'twilio' && provider !== 'sip') {
+        return res.status(400).json({ message: "Invalid provider. Must be 'twilio' or 'sip'" });
+      }
+      
+      // If agentId is provided, verify it exists
+      if (agentId) {
+        const agent = await storage.getAgent(req.user!.id, agentId);
+        if (!agent) {
+          return res.status(404).json({ message: "Agent not found" });
+        }
+      }
+      
+      // Create the phone number
+      const phoneNumber = await storage.createPhoneNumber({
+        number,
+        provider,
+        agentId: agentId || null,
+        accountId: null, // Could be linked to an account in the future
+        configuration: configuration || {},
+        isActive: isActive !== undefined ? isActive : true,
+      });
+      
+      res.json({
+        message: "Phone number added successfully",
+        phoneNumber,
+      });
+    } catch (error: any) {
+      console.error('Error creating phone number:', error);
+      res.status(500).json({ 
+        message: "Failed to create phone number",
+        error: error.message 
+      });
+    }
+  });
+  
+  app.patch("/api/phone-numbers/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const updates = req.body;
+      
+      // Get existing phone number
+      const existingNumber = await storage.getPhoneNumber(id);
+      if (!existingNumber) {
+        return res.status(404).json({ message: "Phone number not found" });
+      }
+      
+      // If agentId is being updated, verify it exists
+      if (updates.agentId !== undefined && updates.agentId !== null) {
+        const agent = await storage.getAgent(req.user!.id, updates.agentId);
+        if (!agent) {
+          return res.status(404).json({ message: "Agent not found" });
+        }
+      }
+      
+      // Update the phone number
+      const updatedNumber = await storage.updatePhoneNumber(id, updates);
+      
+      res.json({
+        message: "Phone number updated successfully",
+        phoneNumber: updatedNumber,
+      });
+    } catch (error: any) {
+      console.error('Error updating phone number:', error);
+      res.status(500).json({ 
+        message: "Failed to update phone number",
+        error: error.message 
+      });
+    }
+  });
+  
+  app.delete("/api/phone-numbers/:id", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      
+      // Verify the phone number exists
+      const phoneNumber = await storage.getPhoneNumber(id);
+      if (!phoneNumber) {
+        return res.status(404).json({ message: "Phone number not found" });
+      }
+      
+      // Delete the phone number
+      const deleted = await storage.deletePhoneNumber(id);
+      
+      if (!deleted) {
+        return res.status(500).json({ message: "Failed to delete phone number" });
+      }
+      
+      res.json({
+        message: "Phone number deleted successfully",
+      });
+    } catch (error: any) {
+      console.error('Error deleting phone number:', error);
+      res.status(500).json({ 
+        message: "Failed to delete phone number",
+        error: error.message 
+      });
+    }
+  });
+
   // Playground Routes
   app.post("/api/playground/start", requireAuth, async (req: Request, res: Response) => {
     try {
@@ -1200,14 +1337,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Calculate duration if not already set
-      const startedAt = session.metadata?.startedAt ? new Date(session.metadata.startedAt) : session.createdAt;
+      const sessionMetadata = (session.metadata || {}) as Record<string, any>;
+      const startedAt = sessionMetadata.startedAt ? new Date(sessionMetadata.startedAt) : session.createdAt;
       const duration = Math.floor((Date.now() - startedAt.getTime()) / 1000);
       
       // Update session with final data
       await storage.updatePlaygroundSession(sessionId, {
         duration,
         metadata: {
-          ...session.metadata,
+          ...sessionMetadata,
           endedAt: new Date().toISOString(),
         },
       });
