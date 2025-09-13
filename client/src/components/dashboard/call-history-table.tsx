@@ -62,7 +62,8 @@ export default function CallHistoryTable({ calls }: CallHistoryTableProps) {
         </div>
       </CardHeader>
       <CardContent className="p-0">
-        <div className="overflow-x-auto">
+        {/* Desktop Table View */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full">
             <thead className="bg-muted/50">
               <tr>
@@ -119,6 +120,42 @@ export default function CallHistoryTable({ calls }: CallHistoryTableProps) {
               ))}
             </tbody>
           </table>
+        </div>
+        
+        {/* Mobile Card View */}
+        <div className="md:hidden p-4 space-y-4">
+          {calls.slice(0, 5).map((call) => (
+            <div key={call.id} className="border rounded-lg p-4 space-y-3">
+              <div className="flex justify-between items-start">
+                <div>
+                  <p className="font-medium text-sm">{call.id}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {formatTimestamp(call.startTime)}
+                  </p>
+                </div>
+                <Badge className={getSentimentColor(call.sentiment)}>
+                  {call.sentiment || "unknown"}
+                </Badge>
+              </div>
+              
+              <div className="flex items-center gap-2">
+                <Badge variant="outline" className={getPlatformColor(call.agent?.platform)}>
+                  {call.agent?.platform || "unknown"}
+                </Badge>
+                <span className="text-sm text-muted-foreground">
+                  {formatDuration(call.duration)}
+                </span>
+              </div>
+              
+              <div className="flex gap-2">
+                <Link href={`/calls/${call.id}`}>
+                  <Button size="sm" variant="outline" className="w-full">
+                    View Details
+                  </Button>
+                </Link>
+              </div>
+            </div>
+          ))}
         </div>
       </CardContent>
     </Card>

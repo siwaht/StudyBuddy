@@ -40,7 +40,7 @@ export default function KpiCards({ stats }: KpiCardsProps) {
   ];
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
       {kpis.map((kpi, index) => (
         <Card key={index} className="shadow-sm" data-testid={`kpi-card-${index}`}>
           <CardContent className="p-6">

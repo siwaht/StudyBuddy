@@ -55,18 +55,18 @@ export default function Header() {
   };
 
   return (
-    <header className="bg-card border-b border-border px-6 py-4">
+    <header className="bg-card border-b border-border px-4 md:px-6 py-3 md:py-4">
       <div className="flex justify-between items-center">
-        <div>
-          <h2 className="text-2xl font-semibold text-foreground" data-testid="page-title">
+        <div className="ml-12 md:ml-0">
+          <h2 className="text-xl md:text-2xl font-semibold text-foreground" data-testid="page-title">
             {title}
           </h2>
-          <p className="text-sm text-muted-foreground" data-testid="page-subtitle">
+          <p className="text-xs md:text-sm text-muted-foreground" data-testid="page-subtitle">
             {subtitle}
           </p>
         </div>
-        <div className="flex items-center space-x-4">
-          <div className="flex items-center space-x-2 text-sm text-muted-foreground">
+        <div className="flex items-center space-x-2 md:space-x-4">
+          <div className="hidden md:flex items-center space-x-2 text-sm text-muted-foreground">
             <Calendar className="h-4 w-4" />
             <span>Date Range: Last 7 Days</span>
           </div>

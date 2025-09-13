@@ -1,14 +1,19 @@
 import { Link, useLocation } from "wouter";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { Button } from "@/components/ui/button";
 import { 
   BarChart3, 
   Phone, 
   Bot, 
   TrendingUp, 
   Users, 
-  Settings 
+  Settings,
+  Menu
 } from "lucide-react";
+import { useState } from "react";
 
 const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: BarChart3 },
@@ -22,10 +27,10 @@ const adminNavigation = [
   { name: "Settings", href: "/settings", icon: Settings },
 ];
 
-export default function Sidebar() {
+function SidebarContent() {
   const [location] = useLocation();
   const { isAdmin } = useAuth();
-
+  
   return (
     <div className="w-60 bg-sidebar text-sidebar-foreground flex flex-col">
       <div className="p-6 border-b border-sidebar-border">
@@ -82,5 +87,34 @@ export default function Sidebar() {
         )}
       </nav>
     </div>
+  );
+}
+
+export default function Sidebar() {
+  const isMobile = useIsMobile();
+  const [open, setOpen] = useState(false);
+  
+  if (!isMobile) {
+    return <SidebarContent />;
+  }
+  
+  return (
+    <Sheet open={open} onOpenChange={setOpen}>
+      <SheetTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="md:hidden fixed top-4 left-4 z-50"
+          aria-label="Open navigation menu"
+        >
+          <Menu className="h-5 w-5" />
+        </Button>
+      </SheetTrigger>
+      <SheetContent side="left" className="p-0 w-60">
+        <div onClick={() => setOpen(false)}>
+          <SidebarContent />
+        </div>
+      </SheetContent>
+    </Sheet>
   );
 }
