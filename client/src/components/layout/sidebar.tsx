@@ -21,8 +21,6 @@ const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: BarChart3 },
   { name: "Call History", href: "/calls", icon: Phone },
   { name: "Agent Config", href: "/agents", icon: Bot },
-  { name: "Playground", href: "/playground", icon: TestTube },
-  { name: "Phone Numbers", href: "/phone-numbers", icon: Phone },
   { name: "Advanced Analytics", href: "/analytics", icon: TrendingUp },
 ];
 
@@ -52,8 +50,6 @@ function SidebarContent() {
               "/dashboard": "viewDashboard",
               "/calls": "viewCallHistory",
               "/agents": "viewAgents",
-              "/playground": "viewPlayground",
-              "/phone-numbers": "viewPhoneNumbers",
               "/analytics": "viewAnalytics",
             };
             
