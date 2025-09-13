@@ -1,12 +1,51 @@
 import express, { type Request, Response, NextFunction } from "express";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
+import compression from "compression";
+import rateLimit from "express-rate-limit";
 import { pool } from "./db";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { authenticate } from "./auth";
 
 const app = express();
+
+// Enable compression for all responses to reduce bandwidth usage
+app.use(compression({
+  filter: (req, res) => {
+    // Don't compress responses with "x-no-compression" header
+    if (req.headers['x-no-compression']) {
+      return false;
+    }
+    // Use compression for JSON, text, and other compressible types
+    return compression.filter(req, res);
+  },
+  level: 6, // Balance between compression ratio and speed
+}));
+
+// Configure rate limiting to prevent abuse
+const generalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // Limit each IP to 100 requests per windowMs
+  message: 'Too many requests from this IP, please try again later.',
+  standardHeaders: true, // Return rate limit info in headers
+  legacyHeaders: false, // Disable X-RateLimit-* headers
+});
+
+// Stricter rate limiting for auth endpoints
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5, // Limit each IP to 5 auth requests per windowMs
+  message: 'Too many authentication attempts, please try again later.',
+  skipSuccessfulRequests: true, // Don't count successful requests
+});
+
+// Apply general rate limiting to all routes
+app.use('/api/', generalLimiter);
+
+// Apply stricter rate limiting to authentication routes
+app.use('/api/auth/', authLimiter);
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
