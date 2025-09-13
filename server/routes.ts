@@ -895,6 +895,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Only ElevenLabs platform is currently supported" });
       }
       
+      // Check if user entered an API key instead of an agent ID
+      if (agentId.startsWith('sk_') || agentId.startsWith('xi-')) {
+        return res.status(400).json({ 
+          message: "Invalid Agent ID format",
+          error: "You entered an API key instead of an Agent ID. Agent IDs start with 'agent_'. Please find your Agent ID in the ElevenLabs dashboard under Conversational AI → Agents."
+        });
+      }
+      
       // Verify account if provided
       if (accountId && typeof accountId === 'string') {
         const account = await storage.getAccount(accountId);

@@ -193,6 +193,16 @@ export default function Agents() {
       });
       return;
     }
+    
+    // Validate that the user isn't entering an API key instead of an agent ID
+    if (importForm.agentId.startsWith('sk_') || importForm.agentId.startsWith('xi-')) {
+      toast({
+        title: "Invalid Agent ID",
+        description: "You entered an API key instead of an Agent ID. Agent IDs look like 'agent_xxxxx'. Find them in your ElevenLabs dashboard under Conversational AI → Agents.",
+        variant: "destructive",
+      });
+      return;
+    }
     searchAgentMutation.mutate(importForm);
   };
 
@@ -425,7 +435,7 @@ export default function Agents() {
                     setImportForm({ ...importForm, agentId: e.target.value });
                     setSearchedAgent(null);
                   }}
-                  placeholder={importForm.platform === 'elevenlabs' ? "Enter ElevenLabs agent ID" : "Enter agent ID"}
+                  placeholder={importForm.platform === 'elevenlabs' ? "e.g., agent_1001k3jts1zhf35sd..." : "Enter agent ID"}
                   data-testid="input-agent-id"
                 />
                 <Button
@@ -448,10 +458,39 @@ export default function Agents() {
             </div>
             
             {importForm.platform === 'elevenlabs' && (
-              <Alert>
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>
-                  You can find your agent ID in the ElevenLabs dashboard under Conversational AI → Agents
+              <Alert className="border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800">
+                <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                <AlertDescription className="text-amber-900 dark:text-amber-100">
+                  <div className="space-y-3">
+                    <p className="font-bold text-red-600 dark:text-red-400">⚠️ IMPORTANT: Don't confuse Agent ID with API Key!</p>
+                    
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="border-2 border-green-400 dark:border-green-600 p-2 rounded bg-green-50 dark:bg-green-950/30">
+                        <p className="font-semibold text-green-700 dark:text-green-400">✓ CORRECT - Agent ID:</p>
+                        <code className="text-xs block mt-1 font-mono">agent_1001k3jts1zhf35sd...</code>
+                        <p className="text-xs mt-1 text-green-600 dark:text-green-500">Starts with "agent_"</p>
+                      </div>
+                      <div className="border-2 border-red-400 dark:border-red-600 p-2 rounded bg-red-50 dark:bg-red-950/30">
+                        <p className="font-semibold text-red-700 dark:text-red-400">✗ WRONG - API Key:</p>
+                        <code className="text-xs block mt-1 font-mono">sk_9f229008499263...</code>
+                        <p className="text-xs mt-1 text-red-600 dark:text-red-500">Starts with "sk_" or "xi-"</p>
+                      </div>
+                    </div>
+                    
+                    <div className="bg-white dark:bg-gray-900 p-3 rounded border border-gray-300 dark:border-gray-700">
+                      <p className="font-semibold text-sm mb-2">📍 How to find your Agent ID in ElevenLabs:</p>
+                      <ol className="list-decimal pl-5 space-y-1 text-sm">
+                        <li>Log into ElevenLabs dashboard</li>
+                        <li>Click <strong>"Conversational AI"</strong> in the left sidebar</li>
+                        <li>Click the <strong>"Agents"</strong> tab</li>
+                        <li>Click on your agent's name to open it</li>
+                        <li>Find the Agent ID (starts with "agent_") and copy it</li>
+                      </ol>
+                      <p className="text-xs text-gray-600 dark:text-gray-400 mt-2 italic">
+                        Note: Your API key (for authentication) goes in the Integrations page, NOT here.
+                      </p>
+                    </div>
+                  </div>
                 </AlertDescription>
               </Alert>
             )}
