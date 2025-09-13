@@ -52,12 +52,17 @@ export default function Transcript({ transcript = [], currentTime = 0 }: Transcr
 
   // Simple sentiment analysis based on keywords
   const analyzeSentiment = (text: string): string => {
+    // Handle undefined or non-string text
+    if (!text || typeof text !== 'string') {
+      return "neutral";
+    }
+    
     const positiveWords = ["thank", "great", "excellent", "happy", "good", "wonderful", "perfect", "appreciate"];
     const negativeWords = ["frustrated", "angry", "bad", "terrible", "awful", "horrible", "hate", "problem"];
     
     const lowerText = text.toLowerCase();
-    const positiveCount = positiveWords.filter(word => lowerText.includes(word)).length;
-    const negativeCount = negativeWords.filter(word => lowerText.includes(word)).length;
+    const positiveCount = positiveWords.filter(word => word && lowerText.includes(word.toLowerCase())).length;
+    const negativeCount = negativeWords.filter(word => word && lowerText.includes(word.toLowerCase())).length;
     
     if (positiveCount > negativeCount) return "positive";
     if (negativeCount > positiveCount) return "negative";
