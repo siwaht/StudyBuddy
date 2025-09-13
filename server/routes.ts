@@ -610,8 +610,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Add recording URL for ElevenLabs conversations if not present
       let recordingUrl = call.recordingUrl;
       if (call.id.startsWith('EL-') && !recordingUrl && elevenlabsService.isConfigured()) {
-        const conversationId = call.id.replace('EL-', '');
-        recordingUrl = await elevenlabsService.getConversationRecordingUrl(conversationId);
+        // Use the full call ID as the recording endpoint parameter
+        recordingUrl = `/api/calls/${call.id}/recording`;
       }
       
       res.json({
@@ -622,6 +622,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch call" });
+    }
+  });
+
+  // Proxy endpoint for ElevenLabs call recordings
+  app.get("/api/calls/:id/recording", requireAuth, async (req: Request, res: Response) => {
+    try {
+      // Verify user has access to this call
+      const call = await storage.getCall(req.user!.id, req.params.id);
+      if (!call) {
+        return res.status(404).json({ message: "Call not found or access denied" });
+      }
+
+      // Only handle ElevenLabs recordings
+      if (!call.id.startsWith('EL-')) {
+        return res.status(404).json({ message: "Recording not available" });
+      }
+
+      const conversationId = call.id.replace('EL-', '');
+      
+      // Fetch the audio from ElevenLabs
+      const audioBuffer = await elevenlabsService.getConversationAudio(conversationId);
+      
+      if (!audioBuffer) {
+        return res.status(404).json({ message: "Recording not found" });
+      }
+
+      // Set appropriate headers for audio streaming
+      res.set({
+        'Content-Type': 'audio/mpeg',
+        'Content-Length': audioBuffer.length.toString(),
+        'Cache-Control': 'private, max-age=3600', // Cache for 1 hour
+      });
+
+      res.send(audioBuffer);
+    } catch (error) {
+      console.error('Error fetching recording:', error);
+      res.status(500).json({ message: "Failed to fetch recording" });
     }
   });
 

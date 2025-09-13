@@ -175,46 +175,62 @@ class ElevenLabsService {
     }
 
     try {
-      // First, get the conversation details to find the history item ID
+      // First, get the conversation details which may contain audio URL or history item info
       const conversation = await this.getConversation(conversationId);
       if (!conversation) {
         console.error(`Conversation ${conversationId} not found`);
         return null;
       }
 
-      // The conversation may contain a history_item_id or we need to construct it
-      // ElevenLabs typically stores audio with the conversation ID
-      // Try direct audio retrieval endpoint first
-      const audioUrl = `https://api.elevenlabs.io/v1/history/${conversationId}/audio`;
-      
-      const response = await fetch(audioUrl, {
-        method: "GET",
-        headers: {
-          "xi-api-key": this.apiKey,
-        },
-      });
-
-      if (!response.ok) {
-        // Try alternative endpoint for conversation audio
-        const altUrl = `https://api.elevenlabs.io/v1/convai/conversations/${conversationId}/audio`;
-        const altResponse = await fetch(altUrl, {
+      // Check if the conversation has an audio URL or audio data
+      if (conversation.audio_url) {
+        // Fetch audio from the provided URL
+        const response = await fetch(conversation.audio_url, {
           method: "GET",
           headers: {
             "xi-api-key": this.apiKey,
           },
         });
         
-        if (!altResponse.ok) {
-          console.error(`Failed to fetch audio for conversation ${conversationId}`);
-          return null;
+        if (response.ok) {
+          const audioBuffer = await response.arrayBuffer();
+          return Buffer.from(audioBuffer);
         }
-        
-        const audioBuffer = await altResponse.arrayBuffer();
+      }
+
+      // Try to get audio using the conversation's history_item_id if available
+      const historyItemId = conversation.history_item_id || conversationId;
+      
+      // Try the history audio endpoint
+      const historyAudioUrl = `https://api.elevenlabs.io/v1/history/${historyItemId}/audio`;
+      const historyResponse = await fetch(historyAudioUrl, {
+        method: "GET",
+        headers: {
+          "xi-api-key": this.apiKey,
+        },
+      });
+
+      if (historyResponse.ok) {
+        const audioBuffer = await historyResponse.arrayBuffer();
         return Buffer.from(audioBuffer);
       }
 
-      const audioBuffer = await response.arrayBuffer();
-      return Buffer.from(audioBuffer);
+      // As a fallback, try the conversational AI endpoint
+      const convaiAudioUrl = `https://api.elevenlabs.io/v1/convai/conversations/${conversationId}/audio`;
+      const convaiResponse = await fetch(convaiAudioUrl, {
+        method: "GET",
+        headers: {
+          "xi-api-key": this.apiKey,
+        },
+      });
+      
+      if (convaiResponse.ok) {
+        const audioBuffer = await convaiResponse.arrayBuffer();
+        return Buffer.from(audioBuffer);
+      }
+      
+      console.error(`Failed to fetch audio for conversation ${conversationId} from all endpoints`);
+      return null;
     } catch (error) {
       console.error(`Error fetching audio for conversation ${conversationId}:`, error);
       return null;
@@ -228,9 +244,9 @@ class ElevenLabsService {
     }
 
     try {
-      // Generate a streaming URL for the audio
-      // This returns a URL that can be used directly in audio players
-      return `https://api.elevenlabs.io/v1/history/${conversationId}/audio?xi-api-key=${this.apiKey}`;
+      // Return a proxy URL that will be handled by our server
+      // This avoids exposing the API key to the client
+      return `/api/calls/${conversationId}/recording`;
     } catch (error) {
       console.error(`Error generating recording URL for conversation ${conversationId}:`, error);
       return null;
