@@ -24,28 +24,36 @@ export class ElevenLabsIntegration {
 
   async getApiKey(accountId?: string): Promise<string | null> {
     try {
+      let apiKey: string | null = null;
+      
       // If accountId is provided, get that specific account
       if (accountId) {
         const account = await storage.getAccount(accountId);
         if (account && account.isActive && account.service === 'elevenlabs') {
-          return decrypt(account.encryptedApiKey);
+          apiKey = decrypt(account.encryptedApiKey);
         }
       }
       
       // Otherwise, get the first active ElevenLabs account
-      const accounts = await storage.getAccountsByService('elevenlabs');
-      const activeAccount = accounts.find(a => a.isActive);
-      if (activeAccount) {
-        return decrypt(activeAccount.encryptedApiKey);
+      if (!apiKey) {
+        const accounts = await storage.getAccountsByService('elevenlabs');
+        const activeAccount = accounts.find(a => a.isActive);
+        if (activeAccount) {
+          apiKey = decrypt(activeAccount.encryptedApiKey);
+        }
       }
 
       // Fallback to environment variable
-      const envKey = process.env.ELEVENLABS_API_KEY;
-      if (envKey) {
-        return envKey;
+      if (!apiKey) {
+        apiKey = process.env.ELEVENLABS_API_KEY || null;
       }
 
-      return null;
+      // Clean the API key - remove whitespace, newlines, and control characters
+      if (apiKey) {
+        apiKey = apiKey.trim().replace(/[\r\n\t]/g, '').replace(/[^\x20-\x7E]/g, '');
+      }
+
+      return apiKey;
     } catch (error) {
       console.error('Failed to get ElevenLabs API key:', error);
       return null;
@@ -59,8 +67,10 @@ export class ElevenLabsIntegration {
     }
 
     try {
+      // Clean the agent ID as well
+      const cleanAgentId = agentId.trim();
       const response = await axios.get(
-        `${this.baseUrl}/convai/agents/${agentId}`,
+        `${this.baseUrl}/convai/agents/${cleanAgentId}`,
         {
           headers: {
             'xi-api-key': apiKey,

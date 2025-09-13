@@ -15,8 +15,10 @@ async function getLiveKitCredentials(accountId?: string): Promise<{ apiKey: stri
       const account = await storage.getAccount(accountId);
       if (account && account.isActive && account.service === 'livekit') {
         // Decrypt the API key which should contain both key and secret in format "KEY:SECRET"
-        const decrypted = decrypt(account.encryptedApiKey);
-        const [apiKey, apiSecret] = decrypted.split(':');
+        let decrypted = decrypt(account.encryptedApiKey);
+        // Clean the decrypted string from any control characters
+        decrypted = decrypted.trim().replace(/[\r\n\t]/g, '').replace(/[^\x20-\x7E]/g, '');
+        const [apiKey, apiSecret] = decrypted.split(':').map(s => s.trim());
         if (apiKey && apiSecret) {
           // Use URL from metadata if available, otherwise use default
           const url = (account.metadata as any)?.url || DEFAULT_LIVEKIT_URL;
@@ -29,8 +31,10 @@ async function getLiveKitCredentials(accountId?: string): Promise<{ apiKey: stri
     const accounts = await storage.getAccountsByService('livekit');
     const activeAccount = accounts.find(a => a.isActive);
     if (activeAccount) {
-      const decrypted = decrypt(activeAccount.encryptedApiKey);
-      const [apiKey, apiSecret] = decrypted.split(':');
+      let decrypted = decrypt(activeAccount.encryptedApiKey);
+      // Clean the decrypted string from any control characters
+      decrypted = decrypted.trim().replace(/[\r\n\t]/g, '').replace(/[^\x20-\x7E]/g, '');
+      const [apiKey, apiSecret] = decrypted.split(':').map(s => s.trim());
       if (apiKey && apiSecret) {
         const url = (activeAccount.metadata as any)?.url || DEFAULT_LIVEKIT_URL;
         return { apiKey, apiSecret, url };
@@ -41,7 +45,11 @@ async function getLiveKitCredentials(accountId?: string): Promise<{ apiKey: stri
     const envKey = process.env.LIVEKIT_API_KEY;
     const envSecret = process.env.LIVEKIT_API_SECRET;
     if (envKey && envSecret) {
-      return { apiKey: envKey, apiSecret: envSecret, url: DEFAULT_LIVEKIT_URL };
+      return { 
+        apiKey: envKey.trim(), 
+        apiSecret: envSecret.trim(), 
+        url: DEFAULT_LIVEKIT_URL 
+      };
     }
 
     return null;
