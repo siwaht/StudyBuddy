@@ -130,6 +130,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/dashboard/stats", requireAuth, async (req: Request, res: Response) => {
     try {
       const stats = await storage.getDashboardStats(req.user!.id);
+      
+      // Set cache headers for dashboard stats (cache for 1 minute)
+      res.set({
+        'Cache-Control': 'private, max-age=60',
+        'Vary': 'Authorization'
+      });
+      
       res.json(stats);
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch dashboard stats" });
@@ -408,6 +415,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/agents", requireAuth, async (req: Request, res: Response) => {
     try {
       const agents = await storage.getAllAgents(req.user!.id);
+      
+      // Set cache headers for agents list (cache for 5 minutes)
+      res.set({
+        'Cache-Control': 'private, max-age=300',
+        'Vary': 'Authorization'
+      });
+      
       res.json(agents);
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch agents" });
@@ -472,6 +486,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ...call,
         agent: agentsMap.get(call.agentId),
       }));
+      
+      // Set cache headers for calls list (cache for 30 seconds - since calls update frequently)
+      res.set({
+        'Cache-Control': 'private, max-age=30',
+        'Vary': 'Authorization'
+      });
       
       res.json(callsWithAgents);
     } catch (error) {
@@ -542,6 +562,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       };
       
       const analyticsData = await storage.getAnalyticsData(req.user!.id, params);
+      
+      // Set cache headers for analytics data (cache for 2 minutes)
+      res.set({
+        'Cache-Control': 'private, max-age=120',
+        'Vary': 'Authorization'
+      });
+      
       res.json(analyticsData);
     } catch (error) {
       console.error('Analytics error:', error);

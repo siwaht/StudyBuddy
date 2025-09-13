@@ -10,6 +10,11 @@ import { authenticate } from "./auth";
 
 const app = express();
 
+// Configure trust proxy for production (required when behind load balancer/proxy)
+if (process.env.NODE_ENV === 'production') {
+  app.set('trust proxy', 1); // Trust first proxy
+}
+
 // Enable compression for all responses to reduce bandwidth usage
 app.use(compression({
   filter: (req, res) => {
