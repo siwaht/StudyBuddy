@@ -17,6 +17,7 @@ export interface IStorage {
   getUserByEmail(email: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
   updateUser(id: string, updates: Partial<User>): Promise<User | undefined>;
+  deleteUser(id: string): Promise<boolean>;
   getAllUsers(): Promise<User[]>;
   
   // Authentication
@@ -454,7 +455,11 @@ export class MemStorage implements IStorage {
 
   // User methods
   async getUser(id: string): Promise<User | undefined> {
-    return this.users.get(id);
+    const user = this.users.get(id);
+    if (user && user.permissions === undefined) {
+      user.permissions = {};
+    }
+    return user;
   }
 
   async getUserByUsername(username: string): Promise<User | undefined> {
@@ -494,6 +499,24 @@ export class MemStorage implements IStorage {
     const updatedUser = { ...user, ...updates };
     this.users.set(id, updatedUser);
     return updatedUser;
+  }
+
+  async deleteUser(id: string): Promise<boolean> {
+    const user = this.users.get(id);
+    if (!user) return false;
+    
+    // Delete user-agent assignments for this user
+    const userAgentIds = Array.from(this.userAgents.keys()).filter(key => {
+      const userAgent = this.userAgents.get(key);
+      return userAgent && userAgent.userId === id;
+    });
+    
+    for (const userAgentId of userAgentIds) {
+      this.userAgents.delete(userAgentId);
+    }
+    
+    // Delete the user
+    return this.users.delete(id);
   }
 
   async getAllUsers(): Promise<User[]> {

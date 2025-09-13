@@ -1,11 +1,12 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Plus } from "lucide-react";
 import UserStats from "@/components/user-management/user-stats";
 import UsersTable from "@/components/user-management/users-table";
 import type { UserWithoutPassword } from "@/lib/types";
+import type { Agent } from "@shared/schema";
 import {
   Dialog,
   DialogContent,
@@ -23,19 +24,78 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 
 export default function UserManagement() {
   const [isAddUserOpen, setIsAddUserOpen] = useState(false);
   const [newUser, setNewUser] = useState({
     username: "",
     email: "",
-    role: "viewer",
+    password: "",
+    confirmPassword: "",
+    role: "user",
+    permissions: {
+      dashboard: true,
+      calls: true,
+      agents: true,
+      analytics: true,
+    },
+    agentIds: [] as string[],
   });
   const { toast } = useToast();
   
   const { data: users, isLoading, error } = useQuery<UserWithoutPassword[]>({
     queryKey: ["/api/users"],
+  });
+
+  // Fetch all agents for the assignment dropdown
+  const { data: agents } = useQuery<Agent[]>({
+    queryKey: ["/api/agents"],
+  });
+
+  // Create user mutation
+  const createUserMutation = useMutation({
+    mutationFn: async (userData: any) => {
+      const response = await apiRequest("POST", "/api/users", userData);
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || "Failed to create user");
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Success",
+        description: "User created successfully",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/user-agents-map"] });
+      setIsAddUserOpen(false);
+      // Reset form
+      setNewUser({
+        username: "",
+        email: "",
+        password: "",
+        confirmPassword: "",
+        role: "user",
+        permissions: {
+          dashboard: true,
+          calls: true,
+          agents: true,
+          analytics: true,
+        },
+        agentIds: [],
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
   });
 
   if (isLoading) {
@@ -84,7 +144,7 @@ export default function UserManagement() {
       
       {/* Add User Dialog */}
       <Dialog open={isAddUserOpen} onOpenChange={setIsAddUserOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Add New User</DialogTitle>
             <DialogDescription>
@@ -120,6 +180,34 @@ export default function UserManagement() {
               />
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="password" className="text-right">
+                Password
+              </Label>
+              <Input
+                id="password"
+                type="password"
+                value={newUser.password}
+                onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
+                className="col-span-3"
+                placeholder="Enter password"
+                data-testid="input-password"
+              />
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="confirmPassword" className="text-right">
+                Confirm Password
+              </Label>
+              <Input
+                id="confirmPassword"
+                type="password"
+                value={newUser.confirmPassword}
+                onChange={(e) => setNewUser({ ...newUser, confirmPassword: e.target.value })}
+                className="col-span-3"
+                placeholder="Confirm password"
+                data-testid="input-confirm-password"
+              />
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="role" className="text-right">
                 Role
               </Label>
@@ -132,11 +220,133 @@ export default function UserManagement() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="admin">Admin</SelectItem>
-                  <SelectItem value="supervisor">Supervisor</SelectItem>
-                  <SelectItem value="analyst">Analyst</SelectItem>
-                  <SelectItem value="viewer">Viewer</SelectItem>
+                  <SelectItem value="user">User</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+            
+            {/* Agent Assignment */}
+            <div className="grid grid-cols-4 items-start gap-4">
+              <Label className="text-right pt-2">
+                Assign Agents
+              </Label>
+              <div className="col-span-3 space-y-2">
+                {agents && agents.length > 0 ? (
+                  <div className="max-h-32 overflow-y-auto border rounded-lg p-2">
+                    {agents.map((agent) => (
+                      <div key={agent.id} className="flex items-center space-x-2 py-1">
+                        <Checkbox
+                          id={`agent-${agent.id}`}
+                          checked={newUser.agentIds.includes(agent.id)}
+                          onCheckedChange={(checked) => {
+                            if (checked) {
+                              setNewUser({
+                                ...newUser,
+                                agentIds: [...newUser.agentIds, agent.id],
+                              });
+                            } else {
+                              setNewUser({
+                                ...newUser,
+                                agentIds: newUser.agentIds.filter((id) => id !== agent.id),
+                              });
+                            }
+                          }}
+                          data-testid={`checkbox-agent-${agent.id}`}
+                        />
+                        <Label
+                          htmlFor={`agent-${agent.id}`}
+                          className="text-sm font-normal cursor-pointer"
+                        >
+                          {agent.name} ({agent.platform})
+                        </Label>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">No agents available</p>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  Admin users have access to all agents by default
+                </p>
+              </div>
+            </div>
+
+            {/* Permissions */}
+            <div className="grid grid-cols-4 items-start gap-4">
+              <Label className="text-right pt-2">
+                Permissions
+              </Label>
+              <div className="col-span-3 space-y-2">
+                <div className="border rounded-lg p-3 space-y-2">
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="permission-dashboard"
+                      checked={newUser.permissions.dashboard}
+                      onCheckedChange={(checked) =>
+                        setNewUser({
+                          ...newUser,
+                          permissions: { ...newUser.permissions, dashboard: !!checked },
+                        })
+                      }
+                      data-testid="checkbox-permission-dashboard"
+                    />
+                    <Label htmlFor="permission-dashboard" className="text-sm font-normal cursor-pointer">
+                      Dashboard
+                    </Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="permission-calls"
+                      checked={newUser.permissions.calls}
+                      onCheckedChange={(checked) =>
+                        setNewUser({
+                          ...newUser,
+                          permissions: { ...newUser.permissions, calls: !!checked },
+                        })
+                      }
+                      data-testid="checkbox-permission-calls"
+                    />
+                    <Label htmlFor="permission-calls" className="text-sm font-normal cursor-pointer">
+                      Call History
+                    </Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="permission-agents"
+                      checked={newUser.permissions.agents}
+                      onCheckedChange={(checked) =>
+                        setNewUser({
+                          ...newUser,
+                          permissions: { ...newUser.permissions, agents: !!checked },
+                        })
+                      }
+                      data-testid="checkbox-permission-agents"
+                    />
+                    <Label htmlFor="permission-agents" className="text-sm font-normal cursor-pointer">
+                      Agents
+                    </Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="permission-analytics"
+                      checked={newUser.permissions.analytics}
+                      onCheckedChange={(checked) =>
+                        setNewUser({
+                          ...newUser,
+                          permissions: { ...newUser.permissions, analytics: !!checked },
+                        })
+                      }
+                      data-testid="checkbox-permission-analytics"
+                    />
+                    <Label htmlFor="permission-analytics" className="text-sm font-normal cursor-pointer">
+                      Analytics
+                    </Label>
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  User Management, Integrations, and Settings are admin-only
+                </p>
+              </div>
             </div>
           </div>
           <DialogFooter>
@@ -144,16 +354,29 @@ export default function UserManagement() {
               variant="outline"
               onClick={() => {
                 setIsAddUserOpen(false);
-                setNewUser({ username: "", email: "", role: "viewer" });
+                setNewUser({
+                  username: "",
+                  email: "",
+                  password: "",
+                  confirmPassword: "",
+                  role: "user",
+                  permissions: {
+                    dashboard: true,
+                    calls: true,
+                    agents: true,
+                    analytics: true,
+                  },
+                  agentIds: [],
+                });
               }}
               data-testid="button-cancel"
             >
               Cancel
             </Button>
             <Button
-              onClick={() => {
+              onClick={async () => {
                 // Validate inputs
-                if (!newUser.username || !newUser.email) {
+                if (!newUser.username || !newUser.email || !newUser.password) {
                   toast({
                     title: "Error",
                     description: "Please fill in all required fields",
@@ -161,20 +384,44 @@ export default function UserManagement() {
                   });
                   return;
                 }
-                
-                // Show success message
-                toast({
-                  title: "User Added",
-                  description: `User ${newUser.username} has been successfully created`,
-                });
-                
-                // Close dialog and reset form
-                setIsAddUserOpen(false);
-                setNewUser({ username: "", email: "", role: "viewer" });
+
+                // Validate passwords match
+                if (newUser.password !== newUser.confirmPassword) {
+                  toast({
+                    title: "Error",
+                    description: "Passwords do not match",
+                    variant: "destructive",
+                  });
+                  return;
+                }
+
+                // Validate password length
+                if (newUser.password.length < 8) {
+                  toast({
+                    title: "Error",
+                    description: "Password must be at least 8 characters",
+                    variant: "destructive",
+                  });
+                  return;
+                }
+
+                // Prepare data for API
+                const userData = {
+                  username: newUser.username,
+                  email: newUser.email,
+                  password: newUser.password,
+                  role: newUser.role,
+                  permissions: newUser.permissions,
+                  agentIds: newUser.agentIds,
+                };
+
+                // Call the API
+                createUserMutation.mutate(userData);
               }}
+              disabled={createUserMutation.isPending}
               data-testid="button-save-user"
             >
-              Add User
+              {createUserMutation.isPending ? "Creating..." : "Add User"}
             </Button>
           </DialogFooter>
         </DialogContent>

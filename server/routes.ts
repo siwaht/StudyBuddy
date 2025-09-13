@@ -162,7 +162,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/users", requireAuth, requireAdmin, async (req: Request, res: Response) => {
     try {
-      const userData = insertUserSchema.parse(req.body);
+      // Extract agent IDs and permissions from request body
+      const { agentIds, permissions, ...userDataRaw } = req.body;
+      
+      // Parse user data with the schema
+      const userData = insertUserSchema.parse(userDataRaw);
       
       // Check if user already exists
       const existingUser = await storage.getUserByEmail(userData.email);
@@ -173,15 +177,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Hash the password before storing
       const hashedPassword = await hashPassword(userData.password);
       
-      // Create user with hashed password
+      // Create user with hashed password and permissions
       const user = await storage.createUser({
         ...userData,
-        password: hashedPassword
+        password: hashedPassword,
+        permissions: permissions || {}
       });
+      
+      // If user is not an admin and agent IDs were provided, assign them
+      if (user.role !== 'admin' && agentIds && Array.isArray(agentIds) && agentIds.length > 0) {
+        await storage.assignAgents(user.id, agentIds);
+      }
       
       const { password, ...userWithoutPassword } = user;
       res.status(201).json(userWithoutPassword);
     } catch (error) {
+      console.error('User creation error:', error);
       res.status(400).json({ message: "Invalid user data" });
     }
   });
@@ -189,6 +200,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.patch("/api/users/:id", requireAuth, requireAdmin, async (req: Request, res: Response) => {
     try {
       const updates = req.body;
+      
+      // If password is being updated, hash it first
+      if (updates.password) {
+        updates.password = await hashPassword(updates.password);
+      }
+      
       const user = await storage.updateUser(req.params.id, updates);
       if (!user) {
         return res.status(404).json({ message: "User not found" });
@@ -197,6 +214,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(userWithoutPassword);
     } catch (error) {
       res.status(500).json({ message: "Failed to update user" });
+    }
+  });
+
+  app.delete("/api/users/:id", requireAuth, requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      
+      // Prevent deleting yourself
+      if (id === req.user!.id) {
+        return res.status(400).json({ message: "Cannot delete your own account" });
+      }
+      
+      // Check if user exists
+      const user = await storage.getUser(id);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      // Prevent deleting the last admin
+      if (user.role === 'admin') {
+        const allUsers = await storage.getAllUsers();
+        const adminCount = allUsers.filter(u => u.role === 'admin').length;
+        if (adminCount <= 1) {
+          return res.status(400).json({ message: "Cannot delete the last admin user" });
+        }
+      }
+      
+      // Delete the user
+      const success = await storage.deleteUser(id);
+      if (!success) {
+        return res.status(500).json({ message: "Failed to delete user" });
+      }
+      
+      res.json({ message: "User deleted successfully" });
+    } catch (error) {
+      console.error('Error deleting user:', error);
+      res.status(500).json({ message: "Failed to delete user" });
     }
   });
 
@@ -664,8 +718,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           integrations.push({
             service: service as 'elevenlabs' | 'livekit' | 'openai',
             isActive: false,
-            lastUsed: null as Date | null,
-            updatedAt: null as Date | null,
+            lastUsed: null,
+            updatedAt: new Date(),
             hasKey: false,
           });
         }
