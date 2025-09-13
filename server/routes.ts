@@ -610,8 +610,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Add recording URL for ElevenLabs conversations if not present
       let recordingUrl = call.recordingUrl;
       if (call.id.startsWith('EL-') && !recordingUrl && elevenlabsService.isConfigured()) {
-        // Use the full call ID as the recording endpoint parameter
-        recordingUrl = `/api/calls/${call.id}/recording`;
+        const conversationId = call.id.replace('EL-', '');
+        // Check if audio is actually available before providing the URL
+        const hasAudio = await elevenlabsService.hasConversationAudio(conversationId);
+        if (hasAudio) {
+          // Use the full call ID as the recording endpoint parameter
+          recordingUrl = `/api/calls/${call.id}/recording`;
+        } else {
+          console.log(`No audio available for conversation ${conversationId}`);
+          recordingUrl = null;
+        }
       }
       
       res.json({
@@ -636,16 +644,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Only handle ElevenLabs recordings
       if (!call.id.startsWith('EL-')) {
-        return res.status(404).json({ message: "Recording not available" });
+        return res.status(404).json({ message: "Recording not available for non-ElevenLabs calls" });
       }
 
       const conversationId = call.id.replace('EL-', '');
+      
+      // First check if audio is available
+      const hasAudio = await elevenlabsService.hasConversationAudio(conversationId);
+      if (!hasAudio) {
+        console.log(`No audio available for conversation ${conversationId}`);
+        return res.status(404).json({ message: "Audio recording not available for this conversation. The conversation may not have been recorded or audio may still be processing." });
+      }
       
       // Fetch the audio from ElevenLabs
       const audioBuffer = await elevenlabsService.getConversationAudio(conversationId);
       
       if (!audioBuffer) {
-        return res.status(404).json({ message: "Recording not found" });
+        return res.status(404).json({ message: "Recording not found or not yet available. Please try again later." });
       }
 
       // Set appropriate headers for audio streaming

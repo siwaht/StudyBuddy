@@ -175,8 +175,22 @@ class ElevenLabsService {
     }
 
     try {
-      // Use the correct ElevenLabs Conversational AI endpoint for audio retrieval
-      const audioUrl = `https://api.elevenlabs.io/v1/conversational-ai/conversations/${conversationId}/audio`;
+      // First, check if the conversation has audio available
+      const conversation = await this.getConversation(conversationId);
+      if (!conversation) {
+        console.error(`Conversation ${conversationId} not found`);
+        return null;
+      }
+
+      // Check if audio is available (this field may be present in the conversation response)
+      if (conversation.has_audio === false) {
+        console.log(`No audio available for conversation ${conversationId} - has_audio is false`);
+        return null;
+      }
+
+      // Use the correct ElevenLabs endpoint for audio retrieval
+      // Based on documentation, the correct endpoint is /v1/convai/conversations/{id}/audio
+      const audioUrl = `https://api.elevenlabs.io/v1/convai/conversations/${conversationId}/audio`;
       
       console.log(`Fetching audio from: ${audioUrl}`);
       
@@ -207,6 +221,26 @@ class ElevenLabsService {
     } catch (error) {
       console.error(`Error fetching audio for conversation ${conversationId}:`, error);
       return null;
+    }
+  }
+
+  // Check if conversation has audio available
+  async hasConversationAudio(conversationId: string): Promise<boolean> {
+    if (!this.apiKey) {
+      return false;
+    }
+
+    try {
+      const conversation = await this.getConversation(conversationId);
+      if (!conversation) {
+        return false;
+      }
+
+      // Check the has_audio field if it exists
+      return conversation.has_audio !== false;
+    } catch (error) {
+      console.error(`Error checking audio availability for conversation ${conversationId}:`, error);
+      return false;
     }
   }
 
