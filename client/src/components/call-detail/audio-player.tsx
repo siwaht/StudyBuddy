@@ -23,6 +23,7 @@ export default function AudioPlayer({ recordingUrl, duration, metadata, call, on
   const audioRef = useRef<HTMLAudioElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
+  const [audioDuration, setAudioDuration] = useState(0);
   const [audioLoaded, setAudioLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [recordingStatus, setRecordingStatus] = useState<'checking' | 'available' | 'processing' | 'unavailable'>('checking');
@@ -56,6 +57,17 @@ export default function AudioPlayer({ recordingUrl, duration, metadata, call, on
     const handleLoadedData = () => {
       setAudioLoaded(true);
       setError(null);
+      // Set the actual duration from the audio element
+      if (audio.duration && !isNaN(audio.duration) && isFinite(audio.duration)) {
+        setAudioDuration(Math.floor(audio.duration));
+      }
+    };
+
+    const handleLoadedMetadata = () => {
+      // Also try to get duration from metadata
+      if (audio.duration && !isNaN(audio.duration) && isFinite(audio.duration)) {
+        setAudioDuration(Math.floor(audio.duration));
+      }
     };
 
     const handleError = () => {
@@ -70,12 +82,14 @@ export default function AudioPlayer({ recordingUrl, duration, metadata, call, on
 
     audio.addEventListener('timeupdate', handleTimeUpdate);
     audio.addEventListener('loadeddata', handleLoadedData);
+    audio.addEventListener('loadedmetadata', handleLoadedMetadata);
     audio.addEventListener('error', handleError);
     audio.addEventListener('ended', handleEnded);
 
     return () => {
       audio.removeEventListener('timeupdate', handleTimeUpdate);
       audio.removeEventListener('loadeddata', handleLoadedData);
+      audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
       audio.removeEventListener('error', handleError);
       audio.removeEventListener('ended', handleEnded);
     };
@@ -168,8 +182,10 @@ export default function AudioPlayer({ recordingUrl, duration, metadata, call, on
   };
 
   const getProgressPercentage = () => {
-    if (!duration || !currentTime) return 0;
-    return Math.min((currentTime / duration) * 100, 100);
+    // Use the actual audio duration instead of the prop
+    const totalDuration = audioDuration || duration || 0;
+    if (!totalDuration || !currentTime) return 0;
+    return Math.min((currentTime / totalDuration) * 100, 100);
   };
 
   return (
@@ -221,7 +237,7 @@ export default function AudioPlayer({ recordingUrl, duration, metadata, call, on
                     </div>
                     <div className="flex justify-between text-sm text-muted-foreground">
                       <span data-testid="current-time">{formatTime(currentTime)}</span>
-                      <span data-testid="total-duration">/ {formatDuration(duration)}</span>
+                      <span data-testid="total-duration">/ {formatDuration(audioDuration || duration)}</span>
                     </div>
                   </>
                 ) : recordingStatus === 'processing' ? (
