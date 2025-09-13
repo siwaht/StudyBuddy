@@ -1,7 +1,9 @@
 import { ElevenLabsClient } from "@elevenlabs/elevenlabs-js";
+import { storage } from "../storage";
+import { decrypt } from "../utils/crypto";
 
 interface ElevenLabsConfig {
-  apiKey: string | undefined;
+  apiKey?: string;
 }
 
 class ElevenLabsService {
@@ -15,6 +17,45 @@ class ElevenLabsService {
       this.client = new ElevenLabsClient({
         apiKey: this.apiKey,
       });
+    }
+  }
+
+  // Get API key from account or environment
+  async getApiKey(accountId?: string): Promise<string | null> {
+    try {
+      let apiKey: string | null = null;
+      
+      // If accountId is provided, get that specific account
+      if (accountId) {
+        const account = await storage.getAccount(accountId);
+        if (account && account.isActive && account.service === 'elevenlabs') {
+          apiKey = decrypt(account.encryptedApiKey);
+        }
+      }
+      
+      // Otherwise, get the first active ElevenLabs account
+      if (!apiKey) {
+        const accounts = await storage.getAccountsByService('elevenlabs');
+        const activeAccount = accounts.find((a: any) => a.isActive);
+        if (activeAccount) {
+          apiKey = decrypt(activeAccount.encryptedApiKey);
+        }
+      }
+
+      // Fallback to instance API key or environment variable
+      if (!apiKey) {
+        apiKey = this.apiKey || process.env.ELEVENLABS_API_KEY || null;
+      }
+
+      // Clean the API key - remove whitespace, newlines, and control characters
+      if (apiKey) {
+        apiKey = apiKey.trim().replace(/[\r\n\t]/g, '').replace(/[^\x20-\x7E]/g, '');
+      }
+
+      return apiKey;
+    } catch (error) {
+      console.error('Failed to get ElevenLabs API key:', error);
+      return null;
     }
   }
 
@@ -169,17 +210,36 @@ class ElevenLabsService {
   }
 
   // Get audio recording for a conversation
-  async getConversationAudio(conversationId: string): Promise<Buffer | null> {
-    if (!this.apiKey) {
+  async getConversationAudio(conversationId: string, accountId?: string): Promise<Buffer | null> {
+    const apiKey = await this.getApiKey(accountId);
+    if (!apiKey) {
+      console.error('No API key available for ElevenLabs');
       return null;
     }
 
     try {
       // First, check if the conversation has audio available
-      const conversation = await this.getConversation(conversationId);
+      const conversation = await this.getConversation(conversationId, accountId);
       if (!conversation) {
         console.error(`Conversation ${conversationId} not found`);
         return null;
+      }
+
+      // Check if conversation has a recording_url field (preferred method)
+      if (conversation.recording_url) {
+        console.log(`Using recording_url from conversation: ${conversation.recording_url}`);
+        const response = await fetch(conversation.recording_url, {
+          method: "GET",
+          headers: {
+            "xi-api-key": apiKey,
+          },
+        });
+        
+        if (response.ok) {
+          const audioBuffer = await response.arrayBuffer();
+          console.log(`Successfully fetched audio from recording_url, size: ${audioBuffer.byteLength} bytes`);
+          return Buffer.from(audioBuffer);
+        }
       }
 
       // Check if audio is available (this field may be present in the conversation response)
@@ -188,16 +248,16 @@ class ElevenLabsService {
         return null;
       }
 
-      // Use the correct ElevenLabs endpoint for audio retrieval
-      // Based on documentation, the correct endpoint is /v1/convai/conversations/{id}/audio
-      const audioUrl = `https://api.elevenlabs.io/v1/convai/conversations/${conversationId}/audio`;
+      // Try the correct ElevenLabs endpoint for audio retrieval with format parameter
+      const audioUrl = `https://api.elevenlabs.io/v1/convai/conversations/${conversationId}/audio?format=mp3`;
       
       console.log(`Fetching audio from: ${audioUrl}`);
       
       const response = await fetch(audioUrl, {
         method: "GET",
         headers: {
-          "xi-api-key": this.apiKey,
+          "xi-api-key": apiKey,
+          "Accept": "audio/mpeg",
         },
       });
 
@@ -225,19 +285,20 @@ class ElevenLabsService {
   }
 
   // Check if conversation has audio available
-  async hasConversationAudio(conversationId: string): Promise<boolean> {
-    if (!this.apiKey) {
+  async hasConversationAudio(conversationId: string, accountId?: string): Promise<boolean> {
+    const apiKey = await this.getApiKey(accountId);
+    if (!apiKey) {
       return false;
     }
 
     try {
-      const conversation = await this.getConversation(conversationId);
+      const conversation = await this.getConversation(conversationId, accountId);
       if (!conversation) {
         return false;
       }
 
-      // Check the has_audio field if it exists
-      return conversation.has_audio !== false;
+      // Check if there's a recording_url or has_audio is not false
+      return !!(conversation.recording_url || conversation.has_audio !== false);
     } catch (error) {
       console.error(`Error checking audio availability for conversation ${conversationId}:`, error);
       return false;
