@@ -1,4 +1,4 @@
-import axios from 'axios';
+import { ElevenLabsClient } from '@elevenlabs/elevenlabs-js';
 import { storage } from '../storage';
 import { decrypt } from '../utils/crypto';
 
@@ -40,7 +40,7 @@ interface ElevenLabsConversation {
 }
 
 export class ElevenLabsIntegration {
-  private baseUrl = 'https://api.elevenlabs.io/v1';
+  private client: ElevenLabsClient | null = null;
 
   async getApiKey(accountId?: string): Promise<string | null> {
     try {
@@ -80,88 +80,72 @@ export class ElevenLabsIntegration {
     }
   }
 
-  async fetchAgentById(agentId: string, accountId?: string): Promise<ElevenLabsAgent | null> {
+  async getClient(accountId?: string): Promise<ElevenLabsClient> {
     const apiKey = await this.getApiKey(accountId);
     if (!apiKey) {
       throw new Error('ElevenLabs API key not configured');
     }
 
+    // Create a new client with the API key
+    this.client = new ElevenLabsClient({
+      apiKey: apiKey,
+    });
+
+    return this.client;
+  }
+
+  async fetchAgentById(agentId: string, accountId?: string): Promise<ElevenLabsAgent | null> {
     try {
-      // Clean the agent ID as well
+      const client = await this.getClient(accountId);
+      
+      // Clean the agent ID
       const cleanAgentId = agentId.trim();
-      const response = await axios.get(
-        `${this.baseUrl}/convai/agents/${cleanAgentId}`,
-        {
-          headers: {
-            'xi-api-key': apiKey,
-            'Content-Type': 'application/json',
-          },
-        }
-      );
+      
+      // Use the SDK to fetch agent
+      const agent = await client.conversationalAi.getAgent(cleanAgentId);
 
       // Update last synced timestamp if we have an accountId
       if (accountId) {
         await storage.updateAccount(accountId, { lastSynced: new Date() });
       }
 
-      return response.data;
+      return agent as ElevenLabsAgent;
     } catch (error: any) {
-      if (error.response?.status === 404) {
+      if (error.statusCode === 404) {
         return null;
       }
-      console.error('Error fetching agent from ElevenLabs:', error.response?.data || error.message);
-      throw new Error(`Failed to fetch agent: ${error.response?.data?.detail?.message || error.message}`);
+      console.error('Error fetching agent from ElevenLabs:', error.message);
+      throw new Error(`Failed to fetch agent: ${error.message}`);
     }
   }
 
   async listAgents(limit: number = 100, accountId?: string): Promise<ElevenLabsAgent[]> {
-    const apiKey = await this.getApiKey(accountId);
-    if (!apiKey) {
-      throw new Error('ElevenLabs API key not configured');
-    }
-
     try {
-      const response = await axios.get(
-        `${this.baseUrl}/convai/agents`,
-        {
-          headers: {
-            'xi-api-key': apiKey,
-            'Content-Type': 'application/json',
-          },
-          params: {
-            page_size: limit,
-          },
-        }
-      );
+      const client = await this.getClient(accountId);
+      
+      // Use the SDK to list agents
+      const response = await client.conversationalAi.getAllAgents({
+        page_size: limit,
+      });
 
       // Update last synced timestamp if we have an accountId
       if (accountId) {
         await storage.updateAccount(accountId, { lastSynced: new Date() });
       }
 
-      return response.data.agents || [];
+      return (response.agents || []) as ElevenLabsAgent[];
     } catch (error: any) {
-      console.error('Error listing agents from ElevenLabs:', error.response?.data || error.message);
-      throw new Error(`Failed to list agents: ${error.response?.data?.detail?.message || error.message}`);
+      console.error('Error listing agents from ElevenLabs:', error.message);
+      throw new Error(`Failed to list agents: ${error.message}`);
     }
   }
 
   async testConnection(accountId?: string): Promise<boolean> {
-    const apiKey = await this.getApiKey(accountId);
-    if (!apiKey) {
-      return false;
-    }
-
     try {
-      // Try to fetch user info or list agents to test the connection
-      await axios.get(
-        `${this.baseUrl}/user`,
-        {
-          headers: {
-            'xi-api-key': apiKey,
-          },
-        }
-      );
+      const client = await this.getClient(accountId);
+      
+      // Try to fetch user info to test the connection
+      await client.user.get();
       return true;
     } catch (error) {
       console.error('ElevenLabs connection test failed:', error);
@@ -200,17 +184,13 @@ export class ElevenLabsIntegration {
       cursor?: string;
     }
   ): Promise<{ conversations: ElevenLabsConversation[]; cursor?: string }> {
-    const apiKey = await this.getApiKey(accountId);
-    if (!apiKey) {
-      throw new Error('ElevenLabs API key not configured');
-    }
-
     try {
-      // Note: The conversations endpoint may not be available in all ElevenLabs plans
-      // or may require specific permissions. For now, we'll return empty array if it fails.
+      const client = await this.getClient(accountId);
+      
+      // Build query parameters
       const params: any = {
         agent_id: agentId,
-        limit: options?.limit || 100,
+        page_size: options?.limit || 100,
       };
 
       if (options?.startTime) {
@@ -223,26 +203,16 @@ export class ElevenLabsIntegration {
         params.cursor = options.cursor;
       }
 
-      // Try the convai endpoint which is the correct one for conversational AI agents
-      const response = await axios.get(
-        `${this.baseUrl}/convai/conversations`,
-        {
-          headers: {
-            'xi-api-key': apiKey,
-            'Content-Type': 'application/json',
-          },
-          params,
-        }
-      );
+      // Use the SDK to fetch conversations
+      const response = await client.conversationalAi.getConversations(params);
 
       return {
-        conversations: response.data.conversations || [],
-        cursor: response.data.cursor,
+        conversations: (response.conversations || []) as ElevenLabsConversation[],
+        cursor: response.cursor,
       };
     } catch (error: any) {
       // If the endpoint doesn't exist or returns 404, just return empty conversations
-      // This is common for new agents or accounts without conversation history
-      if (error.response?.status === 404 || error.response?.status === 403) {
+      if (error.statusCode === 404 || error.statusCode === 403) {
         console.log('Conversations endpoint not available for this agent/account');
         return {
           conversations: [],
@@ -250,7 +220,7 @@ export class ElevenLabsIntegration {
         };
       }
       
-      console.error('Error fetching conversations from ElevenLabs:', error.response?.data || error.message);
+      console.error('Error fetching conversations from ElevenLabs:', error.message);
       // Don't throw error for conversation fetching - just return empty array
       return {
         conversations: [],
@@ -263,30 +233,78 @@ export class ElevenLabsIntegration {
     conversationId: string,
     accountId?: string
   ): Promise<ElevenLabsConversation | null> {
-    const apiKey = await this.getApiKey(accountId);
-    if (!apiKey) {
-      throw new Error('ElevenLabs API key not configured');
-    }
-
     try {
-      const response = await axios.get(
-        `${this.baseUrl}/convai/conversations/${conversationId}`,
-        {
-          headers: {
-            'xi-api-key': apiKey,
-            'Content-Type': 'application/json',
-          },
-        }
-      );
+      const client = await this.getClient(accountId);
+      
+      // Use the SDK to fetch conversation details
+      const conversation = await client.conversationalAi.getConversation(conversationId);
 
-      return response.data;
+      return conversation as ElevenLabsConversation;
     } catch (error: any) {
-      console.error('Error fetching conversation details from ElevenLabs:', error.response?.data || error.message);
-      if (error.response?.status === 404 || error.response?.status === 403) {
+      console.error('Error fetching conversation details from ElevenLabs:', error.message);
+      if (error.statusCode === 404 || error.statusCode === 403) {
         return null;
       }
       // Return null for conversation details if there's an error
       return null;
+    }
+  }
+
+  // New method to handle webhook data for recordings
+  async processWebhookData(webhookData: {
+    conversation_id: string;
+    agent_id: string;
+    audio?: string; // Base64 encoded MP3
+    transcript?: any;
+    analysis?: any;
+  }): Promise<void> {
+    try {
+      let recordingUrl: string | undefined;
+      
+      // If audio data is provided, we need to save it
+      if (webhookData.audio) {
+        // Convert base64 to buffer
+        const audioBuffer = Buffer.from(webhookData.audio, 'base64');
+        
+        // Save to a file or cloud storage
+        // For now, we'll save locally but in production you'd want to use S3 or similar
+        const fileName = `recording_${webhookData.conversation_id}.mp3`;
+        const fs = await import('fs');
+        const path = await import('path');
+        
+        const recordingsDir = path.join(process.cwd(), 'recordings');
+        if (!fs.existsSync(recordingsDir)) {
+          fs.mkdirSync(recordingsDir, { recursive: true });
+        }
+        
+        const filePath = path.join(recordingsDir, fileName);
+        fs.writeFileSync(filePath, audioBuffer);
+        
+        // Store the URL/path
+        recordingUrl = `/recordings/${fileName}`;
+        
+        console.log(`Saved recording for conversation ${webhookData.conversation_id}`);
+      }
+      
+      // Update the call record in the database with the recording URL
+      if (recordingUrl) {
+        // Find calls with this conversation ID
+        const allCalls = await storage.getAllCalls();
+        const matchingCall = allCalls.find(call => call.externalId === `EL-${webhookData.conversation_id}`);
+        if (matchingCall) {
+          await storage.updateCall(matchingCall.id, {
+            recordingUrl: recordingUrl,
+            metadata: {
+              ...matchingCall.metadata,
+              hasRecording: true,
+              recordingProcessed: new Date().toISOString(),
+            },
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Error processing webhook data:', error);
+      throw error;
     }
   }
 }
