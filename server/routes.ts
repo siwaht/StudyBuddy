@@ -920,6 +920,88 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Import historical conversations from ElevenLabs
+  app.post("/api/agents/:agentId/import-conversations", requireAuth, requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { agentId } = req.params;
+      const { accountId, startTime, endTime, limit } = req.body;
+      
+      // Verify the agent exists and belongs to the right platform
+      const agent = await storage.getAgent(agentId);
+      if (!agent) {
+        return res.status(404).json({ message: "Agent not found" });
+      }
+      
+      if (agent.platform !== 'elevenlabs') {
+        return res.status(400).json({ 
+          message: "Conversation import is only available for ElevenLabs agents" 
+        });
+      }
+      
+      // Fetch conversations from ElevenLabs
+      let allConversations: any[] = [];
+      let cursor: string | undefined;
+      let totalFetched = 0;
+      const maxLimit = limit || 100;
+      
+      do {
+        const result = await elevenLabsIntegration.fetchConversations(
+          agent.externalId!,
+          accountId || agent.accountId || undefined,
+          {
+            startTime,
+            endTime,
+            limit: Math.min(100, maxLimit - totalFetched),
+            cursor
+          }
+        );
+        
+        allConversations = [...allConversations, ...result.conversations];
+        cursor = result.cursor;
+        totalFetched += result.conversations.length;
+        
+      } while (cursor && totalFetched < maxLimit);
+      
+      // Fetch detailed conversation data for each conversation
+      const detailedConversations = await Promise.all(
+        allConversations.map(async (conv) => {
+          try {
+            const details = await elevenLabsIntegration.fetchConversationDetails(
+              conv.conversation_id,
+              accountId || agent.accountId || undefined
+            );
+            return details || conv;
+          } catch (error) {
+            console.error(`Failed to fetch details for conversation ${conv.conversation_id}:`, error);
+            return conv;
+          }
+        })
+      );
+      
+      // Import conversations into the database
+      const importResults = await storage.bulkImportConversations(
+        agentId,
+        detailedConversations
+      );
+      
+      res.json({
+        message: "Conversations imported successfully",
+        stats: {
+          fetched: detailedConversations.length,
+          imported: importResults.imported,
+          skipped: importResults.skipped,
+          failed: importResults.failed
+        }
+      });
+    } catch (error: any) {
+      console.error('Error importing conversations:', error);
+      res.status(500).json({ 
+        message: "Failed to import conversations",
+        error: error.message 
+      });
+    }
+  });
+
   // Agent Import Routes
   app.get("/api/agents/search/:agentId", requireAuth, async (req: Request, res: Response) => {
     try {

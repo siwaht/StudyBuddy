@@ -19,6 +19,26 @@ interface ElevenLabsAgent {
   metadata?: any;
 }
 
+interface ElevenLabsConversation {
+  conversation_id: string;
+  agent_id: string;
+  user_id?: string;
+  start_time: number;
+  end_time: number;
+  transcript?: Array<{
+    timestamp: string;
+    speaker: 'agent' | 'user';
+    text: string;
+  }>;
+  analysis?: {
+    summary?: string;
+    topics?: string[];
+    sentiment?: 'positive' | 'negative' | 'neutral';
+  };
+  metadata?: any;
+  recording_url?: string;
+}
+
 export class ElevenLabsIntegration {
   private baseUrl = 'https://api.elevenlabs.io/v1';
 
@@ -168,6 +188,88 @@ export class ElevenLabsIntegration {
         originalData: agent,
       },
     };
+  }
+
+  async fetchConversations(
+    agentId: string,
+    accountId?: string,
+    options?: {
+      startTime?: number;
+      endTime?: number;
+      limit?: number;
+      cursor?: string;
+    }
+  ): Promise<{ conversations: ElevenLabsConversation[]; cursor?: string }> {
+    const apiKey = await this.getApiKey(accountId);
+    if (!apiKey) {
+      throw new Error('ElevenLabs API key not configured');
+    }
+
+    try {
+      const params: any = {
+        agent_id: agentId,
+        limit: options?.limit || 100,
+      };
+
+      if (options?.startTime) {
+        params.start_time = options.startTime;
+      }
+      if (options?.endTime) {
+        params.end_time = options.endTime;
+      }
+      if (options?.cursor) {
+        params.cursor = options.cursor;
+      }
+
+      const response = await axios.get(
+        `${this.baseUrl}/conversational-ai/conversations`,
+        {
+          headers: {
+            'xi-api-key': apiKey,
+            'Content-Type': 'application/json',
+          },
+          params,
+        }
+      );
+
+      return {
+        conversations: response.data.conversations || [],
+        cursor: response.data.cursor,
+      };
+    } catch (error: any) {
+      console.error('Error fetching conversations from ElevenLabs:', error.response?.data || error.message);
+      throw new Error(`Failed to fetch conversations: ${error.response?.data?.detail?.message || error.message}`);
+    }
+  }
+
+  async fetchConversationDetails(
+    conversationId: string,
+    accountId?: string
+  ): Promise<ElevenLabsConversation | null> {
+    const apiKey = await this.getApiKey(accountId);
+    if (!apiKey) {
+      throw new Error('ElevenLabs API key not configured');
+    }
+
+    try {
+      const response = await axios.get(
+        `${this.baseUrl}/conversational-ai/conversations/${conversationId}`,
+        {
+          headers: {
+            'xi-api-key': apiKey,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+
+      return response.data;
+    } catch (error: any) {
+      console.error('Error fetching conversation details from ElevenLabs:', error.response?.data || error.message);
+      if (error.response?.status === 404) {
+        return null;
+      }
+      throw new Error(`Failed to fetch conversation details: ${error.response?.data?.detail?.message || error.message}`);
+    }
   }
 }
 

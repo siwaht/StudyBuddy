@@ -1166,6 +1166,90 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
+  // Import conversations from ElevenLabs
+  async importConversationFromElevenLabs(
+    agentId: string,
+    conversation: any
+  ): Promise<string | null> {
+    try {
+      // Generate a unique call ID based on the conversation ID
+      const callId = `EL-${conversation.conversation_id}`;
+      
+      // Check if this conversation already exists
+      const [existingCall] = await db.select().from(calls)
+        .where(eq(calls.id, callId));
+      
+      if (existingCall) {
+        console.log(`Conversation ${callId} already imported, skipping`);
+        return null;
+      }
+
+      // Calculate duration in seconds
+      const duration = conversation.end_time && conversation.start_time
+        ? Math.floor((conversation.end_time - conversation.start_time) / 1000)
+        : 0;
+
+      // Convert Unix timestamp to Date objects
+      const startTime = new Date(conversation.start_time);
+      const endTime = conversation.end_time ? new Date(conversation.end_time) : undefined;
+
+      // Prepare the call data - directly insert with custom ID
+      const callData = {
+        id: callId,
+        agentId,
+        startTime,
+        endTime,
+        duration,
+        sentiment: conversation.analysis?.sentiment || 'neutral',
+        outcome: conversation.metadata?.outcome || 'Completed',
+        recordingUrl: conversation.recording_url,
+        transcript: conversation.transcript || [],
+        analysis: conversation.analysis ? {
+          summary: conversation.analysis.summary || '',
+          topics: conversation.analysis.topics || [],
+        } : undefined,
+        metadata: conversation.metadata || {},
+      };
+
+      // Insert the call with custom ID
+      await db.insert(calls).values(callData);
+      
+      console.log(`Imported conversation ${callId} successfully`);
+      return callId;
+    } catch (error) {
+      console.error(`Failed to import conversation ${conversation.conversation_id}:`, error);
+      return null;
+    }
+  }
+
+  // Bulk import conversations
+  async bulkImportConversations(
+    agentId: string,
+    conversations: any[]
+  ): Promise<{ imported: number; skipped: number; failed: number }> {
+    const results = {
+      imported: 0,
+      skipped: 0,
+      failed: 0,
+    };
+
+    for (const conversation of conversations) {
+      try {
+        const result = await this.importConversationFromElevenLabs(agentId, conversation);
+        if (result) {
+          results.imported++;
+        } else {
+          results.skipped++;
+        }
+      } catch (error) {
+        console.error(`Failed to import conversation:`, error);
+        results.failed++;
+      }
+    }
+
+    return results;
+  }
+
   // Accounts Management
   async getAccount(accountId: string): Promise<Account | undefined> {
     const [account] = await db.select().from(accounts)
