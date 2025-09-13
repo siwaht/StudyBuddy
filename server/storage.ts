@@ -540,13 +540,8 @@ export class DatabaseStorage implements IStorage {
     const user = await this.getUser(userId);
     if (!user) return [];
     
-    // Admins see all agents
-    if (user.role === 'admin') {
-      const allAgents = await db.select({ id: agents.id }).from(agents);
-      return allAgents.map(a => a.id);
-    }
-    
-    // Regular users see only assigned agents
+    // All users (including admins) see only their assigned agents
+    // This ensures proper data isolation and control
     const assignments = await db.select({ agentId: userAgents.agentId })
       .from(userAgents)
       .where(eq(userAgents.userId, userId));
@@ -635,6 +630,14 @@ export class DatabaseStorage implements IStorage {
     
     return await db.select().from(agents)
       .where(inArray(agents.id, agentIds));
+  }
+
+  // Method for admins to get ALL agents in the system (not just assigned)
+  async getAllSystemAgents(userId: string): Promise<Agent[]> {
+    const user = await this.getUser(userId);
+    if (!user || user.role !== 'admin') return [];
+    
+    return await db.select().from(agents);
   }
 
   async createAgent(agent: InsertAgent): Promise<Agent> {
