@@ -1,4 +1,5 @@
 import { 
+  users, agents, calls, performanceMetrics, liveKitRooms, userAgents, accounts,
   type User, type InsertUser,
   type Agent, type InsertAgent,
   type Call, type InsertCall,
@@ -7,6 +8,8 @@ import {
   type UserAgent, type InsertUserAgent,
   type Account, type InsertAccount
 } from "@shared/schema";
+import { db } from "./db";
+import { eq, and, or, sql, desc, asc, between, like, inArray, gte, lte, not, isNull, isNotNull } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import bcrypt from "bcryptjs";
 
@@ -148,21 +151,17 @@ export interface IStorage {
   checkUserPermission(userId: string, permission: string): Promise<boolean>;
 }
 
-export class MemStorage implements IStorage {
-  private users: Map<string, User> = new Map();
-  private agents: Map<string, Agent> = new Map();
-  private calls: Map<string, Call> = new Map();
-  private performanceMetrics: Map<string, PerformanceMetric> = new Map();
-  private liveKitRooms: Map<string, LiveKitRoom> = new Map();
-  private userAgents: Map<string, UserAgent> = new Map();
-  private accounts: Map<string, Account> = new Map();
-
+export class DatabaseStorage implements IStorage {
   constructor() {
     this.seedDataAsync();
   }
 
   private async seedDataAsync() {
-    await this.seedData();
+    // Check if we already have users
+    const existingUsers = await db.select().from(users).limit(1);
+    if (existingUsers.length === 0) {
+      await this.seedData();
+    }
   }
 
   private async seedData() {
@@ -170,253 +169,187 @@ export class MemStorage implements IStorage {
     // Default password for all test users: "password123"
     const hashedPassword = await bcrypt.hash("password123", 10);
     
-    const users = [
+    const seedUsers = await db.insert(users).values([
       {
-        id: randomUUID(),
         username: "alice.johnson",
         email: "alice@company.com",
         password: hashedPassword,
-        role: "admin" as const,
+        role: "admin",
         isActive: true,
         permissions: {},
         lastActive: new Date(Date.now() - 2 * 60 * 60 * 1000), // 2 hours ago
-        createdAt: new Date(),
       },
       {
-        id: randomUUID(),
         username: "admin.smith",
         email: "admin.smith@company.com",
         password: hashedPassword,
-        role: "admin" as const,
+        role: "admin",
         isActive: true,
         permissions: {},
         lastActive: new Date(Date.now() - 1 * 60 * 60 * 1000), // 1 hour ago
-        createdAt: new Date(),
       },
       {
-        id: randomUUID(),
         username: "bob.wilson",
         email: "bob@company.com",
         password: hashedPassword,
-        role: "user" as const,
+        role: "user",
         isActive: true,
         permissions: {},
         lastActive: new Date(Date.now() - 24 * 60 * 60 * 1000), // 1 day ago
-        createdAt: new Date(),
       },
       {
-        id: randomUUID(),
         username: "sarah.connors",
         email: "sarah@company.com",
         password: hashedPassword,
-        role: "user" as const,
+        role: "user",
         isActive: true,
         permissions: {},
         lastActive: new Date(Date.now() - 30 * 60 * 1000), // 30 minutes ago
-        createdAt: new Date(),
       },
       {
-        id: randomUUID(),
         username: "john.doe",
         email: "john@company.com",
         password: hashedPassword,
-        role: "user" as const,
+        role: "user",
         isActive: true,
         permissions: {},
         lastActive: new Date(Date.now() - 4 * 60 * 60 * 1000), // 4 hours ago
-        createdAt: new Date(),
       },
-    ];
-
-    users.forEach(user => this.users.set(user.id, user));
+    ]).returning();
 
     // Seed accounts for ElevenLabs and LiveKit
-    const accounts = [
+    const seedAccounts = await db.insert(accounts).values([
       {
-        id: randomUUID(),
         name: "Production ElevenLabs",
-        service: "elevenlabs" as const,
+        service: "elevenlabs",
         encryptedApiKey: "encrypted_elevenlabs_key_production",
         isActive: true,
         lastSynced: new Date(Date.now() - 2 * 60 * 60 * 1000), // 2 hours ago
         metadata: { workspace: "Production Workspace" },
-        createdAt: new Date(),
-        updatedAt: new Date(),
       },
       {
-        id: randomUUID(),
         name: "Development ElevenLabs",
-        service: "elevenlabs" as const,
+        service: "elevenlabs",
         encryptedApiKey: "encrypted_elevenlabs_key_dev",
         isActive: true,
         lastSynced: new Date(Date.now() - 24 * 60 * 60 * 1000), // 1 day ago
         metadata: { workspace: "Dev Workspace" },
-        createdAt: new Date(),
-        updatedAt: new Date(),
       },
       {
-        id: randomUUID(),
         name: "Main LiveKit Account",
-        service: "livekit" as const,
+        service: "livekit",
         encryptedApiKey: "encrypted_livekit_key_main",
         isActive: true,
         lastSynced: new Date(Date.now() - 1 * 60 * 60 * 1000), // 1 hour ago
         metadata: { region: "us-east-1" },
-        createdAt: new Date(),
-        updatedAt: new Date(),
       },
       {
-        id: randomUUID(),
         name: "Backup LiveKit Account",
-        service: "livekit" as const,
+        service: "livekit",
         encryptedApiKey: "encrypted_livekit_key_backup",
         isActive: false,
         lastSynced: null,
         metadata: { region: "eu-west-1" },
-        createdAt: new Date(),
-        updatedAt: new Date(),
       },
-    ];
-
-    accounts.forEach(account => this.accounts.set(account.id, account));
+    ]).returning();
 
     // Get account IDs for linking agents
-    const prodElevenLabsId = accounts.find(a => a.name === "Production ElevenLabs")?.id;
-    const devElevenLabsId = accounts.find(a => a.name === "Development ElevenLabs")?.id;
-    const mainLiveKitId = accounts.find(a => a.name === "Main LiveKit Account")?.id;
+    const prodElevenLabsId = seedAccounts.find(a => a.name === "Production ElevenLabs")?.id;
+    const devElevenLabsId = seedAccounts.find(a => a.name === "Development ElevenLabs")?.id;
+    const mainLiveKitId = seedAccounts.find(a => a.name === "Main LiveKit Account")?.id;
 
     // Seed agents linked to accounts
-    const agents = [
+    const seedAgents = await db.insert(agents).values([
       {
-        id: randomUUID(),
         name: "SalesBot",
-        platform: "elevenlabs" as const,
+        platform: "elevenlabs",
         accountId: prodElevenLabsId || null,
         description: "High quality voice agent for sales inquiries",
         externalId: null,
         metadata: null,
         isActive: true,
-        createdAt: new Date(),
       },
       {
-        id: randomUUID(),
         name: "SupportRouter",
-        platform: "livekit" as const,
+        platform: "livekit",
         accountId: mainLiveKitId || null,
         description: "Advanced technical support worker with GPT-4o integration",
         externalId: null,
         metadata: null,
         isActive: true,
-        createdAt: new Date(),
       },
       {
-        id: randomUUID(),
         name: "IVR Assistant",
-        platform: "elevenlabs" as const,
+        platform: "elevenlabs",
         accountId: devElevenLabsId || null,
         description: "Initial call routing and FAQ handling",
         externalId: null,
         metadata: null,
         isActive: false,
-        createdAt: new Date(),
       },
       {
-        id: randomUUID(),
         name: "Customer Service Bot",
-        platform: "livekit" as const,
+        platform: "livekit",
         accountId: mainLiveKitId || null,
         description: "General customer service inquiries",
         externalId: null,
         metadata: null,
         isActive: true,
-        createdAt: new Date(),
       },
-    ];
-
-    agents.forEach(agent => this.agents.set(agent.id, agent));
+    ]).returning();
 
     // Create user-agent assignments
-    const userList = Array.from(this.users.values());
-    const agentList = Array.from(this.agents.values());
+    const bobId = seedUsers.find(u => u.username === "bob.wilson")?.id!;
+    const sarahId = seedUsers.find(u => u.username === "sarah.connors")?.id!;
+    const johnId = seedUsers.find(u => u.username === "john.doe")?.id!;
     
-    // Admins don't need assignments - they see everything
-    // Regular users get different agent assignments
-    const bobId = userList.find(u => u.username === "bob.wilson")?.id!;
-    const sarahId = userList.find(u => u.username === "sarah.connors")?.id!;
-    const johnId = userList.find(u => u.username === "john.doe")?.id!;
-    
-    const salesBotId = agentList.find(a => a.name === "SalesBot")?.id!;
-    const supportRouterId = agentList.find(a => a.name === "SupportRouter")?.id!;
-    const ivrAssistantId = agentList.find(a => a.name === "IVR Assistant")?.id!;
-    const customerServiceId = agentList.find(a => a.name === "Customer Service Bot")?.id!;
+    const salesBotId = seedAgents.find(a => a.name === "SalesBot")?.id!;
+    const supportRouterId = seedAgents.find(a => a.name === "SupportRouter")?.id!;
+    const ivrAssistantId = seedAgents.find(a => a.name === "IVR Assistant")?.id!;
+    const customerServiceId = seedAgents.find(a => a.name === "Customer Service Bot")?.id!;
 
     // Bob gets SalesBot and IVR Assistant
-    this.userAgents.set(randomUUID(), {
-      id: randomUUID(),
-      userId: bobId,
-      agentId: salesBotId,
-      assignedAt: new Date(),
-    });
-    this.userAgents.set(randomUUID(), {
-      id: randomUUID(),
-      userId: bobId,
-      agentId: ivrAssistantId,
-      assignedAt: new Date(),
-    });
+    await db.insert(userAgents).values([
+      { userId: bobId, agentId: salesBotId },
+      { userId: bobId, agentId: ivrAssistantId },
+    ]);
 
     // Sarah gets SupportRouter and Customer Service Bot
-    this.userAgents.set(randomUUID(), {
-      id: randomUUID(),
-      userId: sarahId,
-      agentId: supportRouterId,
-      assignedAt: new Date(),
-    });
-    this.userAgents.set(randomUUID(), {
-      id: randomUUID(),
-      userId: sarahId,
-      agentId: customerServiceId,
-      assignedAt: new Date(),
-    });
+    await db.insert(userAgents).values([
+      { userId: sarahId, agentId: supportRouterId },
+      { userId: sarahId, agentId: customerServiceId },
+    ]);
 
     // John gets only Customer Service Bot
-    this.userAgents.set(randomUUID(), {
-      id: randomUUID(),
-      userId: johnId,
-      agentId: customerServiceId,
-      assignedAt: new Date(),
-    });
+    await db.insert(userAgents).values([
+      { userId: johnId, agentId: customerServiceId },
+    ]);
 
     // Seed LiveKit rooms
-    const rooms = [
+    await db.insert(liveKitRooms).values([
       {
-        id: randomUUID(),
         roomId: "RM_A9B8C7",
         name: "Sales Conference",
         isActive: true,
         participantCount: 3,
-        createdAt: new Date(),
       },
       {
-        id: randomUUID(),
         roomId: "RM_D4E5F6",
         name: "Support Room",
         isActive: true,
         participantCount: 2,
-        createdAt: new Date(),
       },
-    ];
-
-    rooms.forEach(room => this.liveKitRooms.set(room.id, room));
+    ]);
 
     // Seed calls
-    const calls = [
+    const seedCalls = await db.insert(calls).values([
       {
         id: "C-1055",
         agentId: salesBotId,
         startTime: new Date(Date.now() - 2 * 60 * 60 * 1000),
         endTime: new Date(Date.now() - 2 * 60 * 60 * 1000 + 5 * 60 * 1000),
         duration: 312, // 5m 12s
-        sentiment: "positive" as const,
+        sentiment: "positive",
         outcome: "Sale Closed",
         recordingUrl: "/recordings/C-1055.mp3",
         transcript: [
@@ -435,7 +368,6 @@ export class MemStorage implements IStorage {
           }
         },
         metadata: { roomId: "RM_A9B8C7" },
-        createdAt: new Date(),
       },
       {
         id: "C-1056",
@@ -443,7 +375,7 @@ export class MemStorage implements IStorage {
         startTime: new Date(Date.now() - 1 * 60 * 60 * 1000),
         endTime: new Date(Date.now() - 1 * 60 * 60 * 1000 + 65 * 1000),
         duration: 65, // 1m 05s
-        sentiment: "negative" as const,
+        sentiment: "negative",
         outcome: "Escalated to Human",
         recordingUrl: "/recordings/C-1056.mp3",
         transcript: [
@@ -462,7 +394,6 @@ export class MemStorage implements IStorage {
           }
         },
         metadata: { roomId: "RM_D4E5F6" },
-        createdAt: new Date(),
       },
       {
         id: "C-1057",
@@ -470,7 +401,7 @@ export class MemStorage implements IStorage {
         startTime: new Date(Date.now() - 3 * 60 * 60 * 1000),
         endTime: new Date(Date.now() - 3 * 60 * 60 * 1000 + 3 * 60 * 1000),
         duration: 180, // 3m
-        sentiment: "neutral" as const,
+        sentiment: "neutral",
         outcome: "Resolved",
         recordingUrl: "/recordings/C-1057.mp3",
         transcript: [
@@ -489,99 +420,66 @@ export class MemStorage implements IStorage {
           }
         },
         metadata: { roomId: "RM_D4E5F6" },
-        createdAt: new Date(),
       },
-    ];
-
-    calls.forEach(call => this.calls.set(call.id, call));
+    ]).returning();
 
     // Seed performance metrics
-    calls.forEach(call => {
-      const metric = {
-        id: randomUUID(),
+    for (const call of seedCalls) {
+      await db.insert(performanceMetrics).values({
         agentId: call.agentId,
         callId: call.id,
-        speechToTextLatency: call.analysis?.latencyWaterfall?.speechToText || 0,
-        elevenLabsLatency: call.analysis?.latencyWaterfall?.elevenLabsTTS || 0,
-        liveKitLatency: call.analysis?.latencyWaterfall?.liveKitTransport || 0,
-        totalLatency: Object.values(call.analysis?.latencyWaterfall || {}).reduce((a, b) => a + b, 0),
+        speechToTextLatency: (call.analysis as any)?.latencyWaterfall?.speechToText || 0,
+        elevenLabsLatency: (call.analysis as any)?.latencyWaterfall?.elevenLabsTTS || 0,
+        liveKitLatency: (call.analysis as any)?.latencyWaterfall?.liveKitTransport || 0,
+        totalLatency: Object.values((call.analysis as any)?.latencyWaterfall || {}).reduce((a: number, b: any) => a + b, 0),
         responseTime: 95,
         audioQuality: "4.6",
         successRate: "0.985",
         timestamp: call.startTime,
-      };
-      this.performanceMetrics.set(metric.id, metric);
-    });
+      });
+    }
   }
 
   // User methods
   async getUser(id: string): Promise<User | undefined> {
-    const user = this.users.get(id);
-    if (user && user.permissions === undefined) {
-      user.permissions = {};
-    }
-    return user;
+    const [user] = await db.select().from(users).where(eq(users.id, id));
+    return user || undefined;
   }
 
   async getUserByUsername(username: string): Promise<User | undefined> {
-    const user = Array.from(this.users.values()).find(user => user.username === username);
-    if (user && user.permissions === undefined) {
-      user.permissions = {};
-    }
-    return user;
+    const [user] = await db.select().from(users).where(eq(users.username, username));
+    return user || undefined;
   }
 
   async getUserByEmail(email: string): Promise<User | undefined> {
-    const user = Array.from(this.users.values()).find(user => user.email === email);
-    if (user && user.permissions === undefined) {
-      user.permissions = {};
-    }
-    return user;
+    const [user] = await db.select().from(users).where(eq(users.email, email));
+    return user || undefined;
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {
-    const user: User = {
-      ...insertUser,
-      id: randomUUID(),
-      createdAt: new Date(),
-      role: insertUser.role || "user",
-      isActive: insertUser.isActive ?? true,
-      lastActive: insertUser.lastActive || null,
-      permissions: insertUser.permissions || {},
-    };
-    this.users.set(user.id, user);
+    const [user] = await db.insert(users).values(insertUser).returning();
     return user;
   }
 
   async updateUser(id: string, updates: Partial<User>): Promise<User | undefined> {
-    const user = this.users.get(id);
-    if (!user) return undefined;
-    
-    const updatedUser = { ...user, ...updates };
-    this.users.set(id, updatedUser);
-    return updatedUser;
+    const [updated] = await db.update(users)
+      .set(updates)
+      .where(eq(users.id, id))
+      .returning();
+    return updated || undefined;
   }
 
   async deleteUser(id: string): Promise<boolean> {
-    const user = this.users.get(id);
-    if (!user) return false;
-    
-    // Delete user-agent assignments for this user
-    const userAgentIds = Array.from(this.userAgents.keys()).filter(key => {
-      const userAgent = this.userAgents.get(key);
-      return userAgent && userAgent.userId === id;
-    });
-    
-    for (const userAgentId of userAgentIds) {
-      this.userAgents.delete(userAgentId);
-    }
+    // Delete user-agent assignments first
+    await db.delete(userAgents).where(eq(userAgents.userId, id));
     
     // Delete the user
-    return this.users.delete(id);
+    const result = await db.delete(users).where(eq(users.id, id));
+    return (result.rowCount ?? 0) > 0;
   }
 
   async getAllUsers(): Promise<User[]> {
-    return Array.from(this.users.values());
+    return await db.select().from(users);
   }
 
   // Authentication methods
@@ -592,10 +490,10 @@ export class MemStorage implements IStorage {
   }
 
   async updatePassword(userId: string, hashedPassword: string): Promise<boolean> {
-    const user = await this.getUser(userId);
-    if (!user) return false;
-    await this.updateUser(userId, { password: hashedPassword });
-    return true;
+    const result = await db.update(users)
+      .set({ password: hashedPassword })
+      .where(eq(users.id, userId));
+    return (result.rowCount ?? 0) > 0;
   }
 
   // User-Agent Assignment methods
@@ -605,427 +503,333 @@ export class MemStorage implements IStorage {
     
     // Admins see all agents
     if (user.role === 'admin') {
-      return Array.from(this.agents.keys());
+      const allAgents = await db.select({ id: agents.id }).from(agents);
+      return allAgents.map(a => a.id);
     }
     
     // Regular users see only assigned agents
-    return Array.from(this.userAgents.values())
-      .filter(ua => ua.userId === userId)
-      .map(ua => ua.agentId);
+    const assignments = await db.select({ agentId: userAgents.agentId })
+      .from(userAgents)
+      .where(eq(userAgents.userId, userId));
+    
+    return assignments.map(a => a.agentId);
   }
 
   async assignAgents(userId: string, agentIds: string[]): Promise<void> {
-    const user = await this.getUser(userId);
-    if (!user) throw new Error('User not found');
-    
-    // Validate that all agent IDs exist
-    for (const agentId of agentIds) {
-      const agent = this.agents.get(agentId);
-      if (!agent) {
-        throw new Error(`Agent with ID ${agentId} not found`);
-      }
-    }
-    
-    // Remove existing assignments for this user
-    const existingAssignments = Array.from(this.userAgents.entries())
-      .filter(([_, ua]) => ua.userId === userId);
-    existingAssignments.forEach(([key, _]) => this.userAgents.delete(key));
+    // Remove existing assignments
+    await db.delete(userAgents).where(eq(userAgents.userId, userId));
     
     // Create new assignments
-    agentIds.forEach(agentId => {
-      const id = randomUUID();
-      this.userAgents.set(id, {
-        id,
-        userId,
-        agentId,
-        assignedAt: new Date(),
-      });
-    });
+    if (agentIds.length > 0) {
+      await db.insert(userAgents).values(
+        agentIds.map(agentId => ({ userId, agentId }))
+      );
+    }
   }
 
   async removeAgentAssignment(userId: string, agentId: string): Promise<void> {
-    const assignment = Array.from(this.userAgents.entries())
-      .find(([_, ua]) => ua.userId === userId && ua.agentId === agentId);
-    
-    if (assignment) {
-      this.userAgents.delete(assignment[0]);
-    }
+    await db.delete(userAgents)
+      .where(and(
+        eq(userAgents.userId, userId),
+        eq(userAgents.agentId, agentId)
+      ));
   }
 
   async getUserAgents(userId: string): Promise<Agent[]> {
     const agentIds = await this.getAssignedAgentIds(userId);
-    return Array.from(this.agents.values())
-      .filter(agent => agentIds.includes(agent.id));
+    if (agentIds.length === 0) return [];
+    
+    return await db.select().from(agents)
+      .where(inArray(agents.id, agentIds));
   }
 
   async getAllUserAgentAssignments(): Promise<Map<string, { count: number; agents: Agent[] }>> {
-    const userAgentMap = new Map<string, { count: number; agents: Agent[] }>();
+    const allUsers = await this.getAllUsers();
+    const result = new Map<string, { count: number; agents: Agent[] }>();
     
-    // Get all users
-    const users = Array.from(this.users.values());
-    const allAgents = Array.from(this.agents.values());
-    
-    for (const user of users) {
-      // Admins have access to all agents
-      if (user.role === 'admin') {
-        userAgentMap.set(user.id, {
-          count: allAgents.length,
-          agents: allAgents
-        });
-      } else {
-        // Regular users have specific assignments
-        const assignedAgentIds = Array.from(this.userAgents.values())
-          .filter(ua => ua.userId === user.id)
-          .map(ua => ua.agentId);
-        
-        const assignedAgents = allAgents
-          .filter(agent => assignedAgentIds.includes(agent.id));
-        
-        userAgentMap.set(user.id, {
-          count: assignedAgents.length,
-          agents: assignedAgents
-        });
-      }
+    for (const user of allUsers) {
+      const userAgentList = await this.getUserAgents(user.id);
+      result.set(user.id, {
+        count: userAgentList.length,
+        agents: userAgentList
+      });
     }
     
-    return userAgentMap;
+    return result;
   }
 
-  // Agent methods - WITH DATA ISOLATION
+  // Agent methods
   async getAgent(userId: string, agentId: string): Promise<Agent | undefined> {
-    const allowedAgentIds = await this.getAssignedAgentIds(userId);
+    const user = await this.getUser(userId);
+    if (!user) return undefined;
     
     // Check if user has access to this agent
-    if (!allowedAgentIds.includes(agentId)) {
-      return undefined;
-    }
+    const assignedIds = await this.getAssignedAgentIds(userId);
+    if (!assignedIds.includes(agentId)) return undefined;
     
-    return this.agents.get(agentId);
+    const [agent] = await db.select().from(agents).where(eq(agents.id, agentId));
+    return agent || undefined;
   }
 
   async getAllAgents(userId: string): Promise<Agent[]> {
-    const allowedAgentIds = await this.getAssignedAgentIds(userId);
-    const agents = Array.from(this.agents.values());
+    const agentIds = await this.getAssignedAgentIds(userId);
+    if (agentIds.length === 0) return [];
     
-    // Filter agents based on user's access
-    return agents.filter(agent => allowedAgentIds.includes(agent.id));
+    return await db.select().from(agents)
+      .where(inArray(agents.id, agentIds));
   }
 
-  async createAgent(insertAgent: InsertAgent): Promise<Agent> {
-    const agent: Agent = {
-      ...insertAgent,
-      id: randomUUID(),
-      createdAt: new Date(),
-      accountId: insertAgent.accountId || null,
-      description: insertAgent.description || null,
-      externalId: insertAgent.externalId || null,
-      metadata: insertAgent.metadata || null,
-      isActive: insertAgent.isActive ?? true,
-    };
-    this.agents.set(agent.id, agent);
-    return agent;
+  async createAgent(agent: InsertAgent): Promise<Agent> {
+    const [created] = await db.insert(agents).values(agent).returning();
+    return created;
   }
 
   async updateAgent(id: string, updates: Partial<Agent>): Promise<Agent | undefined> {
-    const agent = this.agents.get(id);
-    if (!agent) return undefined;
-    
-    const updatedAgent = { ...agent, ...updates };
-    this.agents.set(id, updatedAgent);
-    return updatedAgent;
+    const [updated] = await db.update(agents)
+      .set(updates)
+      .where(eq(agents.id, id))
+      .returning();
+    return updated || undefined;
   }
 
   async deleteAgent(agentId: string): Promise<boolean> {
-    const agent = this.agents.get(agentId);
-    if (!agent) return false;
+    // Delete related data first
+    await db.delete(userAgents).where(eq(userAgents.agentId, agentId));
     
-    // Remove all user-agent assignments for this agent
-    const userAgentIds = Array.from(this.userAgents.keys()).filter(key => {
-      const userAgent = this.userAgents.get(key);
-      return userAgent && userAgent.agentId === agentId;
-    });
+    // Get calls to delete performance metrics
+    const callsToDelete = await db.select({ id: calls.id })
+      .from(calls)
+      .where(eq(calls.agentId, agentId));
     
-    for (const userAgentId of userAgentIds) {
-      this.userAgents.delete(userAgentId);
+    if (callsToDelete.length > 0) {
+      const callIds = callsToDelete.map(c => c.id);
+      await db.delete(performanceMetrics)
+        .where(inArray(performanceMetrics.callId, callIds));
     }
     
-    // Delete the agent
-    return this.agents.delete(agentId);
+    await db.delete(calls).where(eq(calls.agentId, agentId));
+    await db.delete(performanceMetrics).where(eq(performanceMetrics.agentId, agentId));
+    
+    const result = await db.delete(agents).where(eq(agents.id, agentId));
+    return (result.rowCount ?? 0) > 0;
   }
 
-  // Call methods - WITH DATA ISOLATION
+  // Call methods
   async getCall(userId: string, callId: string): Promise<Call | undefined> {
-    const allowedAgentIds = await this.getAssignedAgentIds(userId);
-    const call = this.calls.get(callId);
+    const assignedAgentIds = await this.getAssignedAgentIds(userId);
+    if (assignedAgentIds.length === 0) return undefined;
     
-    // Check if call belongs to an agent the user has access to
-    if (!call || !allowedAgentIds.includes(call.agentId)) {
-      return undefined;
-    }
+    const [call] = await db.select().from(calls)
+      .where(and(
+        eq(calls.id, callId),
+        inArray(calls.agentId, assignedAgentIds)
+      ));
     
-    return call;
+    return call || undefined;
   }
 
   async getAllCalls(userId: string): Promise<Call[]> {
-    const allowedAgentIds = await this.getAssignedAgentIds(userId);
-    const calls = Array.from(this.calls.values());
+    const assignedAgentIds = await this.getAssignedAgentIds(userId);
+    if (assignedAgentIds.length === 0) return [];
     
-    // Filter calls based on user's assigned agents
-    return calls.filter(call => allowedAgentIds.includes(call.agentId));
+    return await db.select().from(calls)
+      .where(inArray(calls.agentId, assignedAgentIds))
+      .orderBy(desc(calls.startTime));
   }
 
   async getCallsByAgent(userId: string, agentId: string): Promise<Call[]> {
-    const allowedAgentIds = await this.getAssignedAgentIds(userId);
+    const assignedAgentIds = await this.getAssignedAgentIds(userId);
+    if (!assignedAgentIds.includes(agentId)) return [];
     
-    // Check if user has access to this agent
-    if (!allowedAgentIds.includes(agentId)) {
-      return [];
-    }
-    
-    return Array.from(this.calls.values()).filter(call => call.agentId === agentId);
+    return await db.select().from(calls)
+      .where(eq(calls.agentId, agentId))
+      .orderBy(desc(calls.startTime));
   }
 
-  async createCall(insertCall: InsertCall): Promise<Call> {
-    const call: Call = {
-      ...insertCall,
-      id: randomUUID(),
-      createdAt: new Date(),
-      endTime: insertCall.endTime || null,
-      duration: insertCall.duration || null,
-      sentiment: insertCall.sentiment || null,
-      outcome: insertCall.outcome || null,
-      recordingUrl: insertCall.recordingUrl || null,
-      transcript: insertCall.transcript || null,
-      analysis: insertCall.analysis || null,
-      metadata: insertCall.metadata || null,
-    };
-    this.calls.set(call.id, call);
-    return call;
+  async createCall(call: InsertCall): Promise<Call> {
+    const [created] = await db.insert(calls).values(call).returning();
+    return created;
   }
 
   async updateCall(id: string, updates: Partial<Call>): Promise<Call | undefined> {
-    const call = this.calls.get(id);
-    if (!call) return undefined;
-    
-    const updatedCall = { ...call, ...updates };
-    this.calls.set(id, updatedCall);
-    return updatedCall;
+    const [updated] = await db.update(calls)
+      .set(updates)
+      .where(eq(calls.id, id))
+      .returning();
+    return updated || undefined;
   }
 
-  // Performance metric methods - WITH DATA ISOLATION
+  // Performance Metrics methods
   async getPerformanceMetric(userId: string, metricId: string): Promise<PerformanceMetric | undefined> {
-    const allowedAgentIds = await this.getAssignedAgentIds(userId);
-    const metric = this.performanceMetrics.get(metricId);
+    const assignedAgentIds = await this.getAssignedAgentIds(userId);
+    if (assignedAgentIds.length === 0) return undefined;
     
-    // Check if metric belongs to an agent the user has access to
-    if (!metric || !allowedAgentIds.includes(metric.agentId)) {
-      return undefined;
-    }
+    const [metric] = await db.select().from(performanceMetrics)
+      .where(and(
+        eq(performanceMetrics.id, metricId),
+        inArray(performanceMetrics.agentId, assignedAgentIds)
+      ));
     
-    return metric;
+    return metric || undefined;
   }
 
   async getPerformanceMetricsByCall(userId: string, callId: string): Promise<PerformanceMetric[]> {
-    const allowedAgentIds = await this.getAssignedAgentIds(userId);
-    
-    // First verify the call belongs to an allowed agent
     const call = await this.getCall(userId, callId);
-    if (!call) {
-      return [];
-    }
+    if (!call) return [];
     
-    return Array.from(this.performanceMetrics.values())
-      .filter(metric => metric.callId === callId && allowedAgentIds.includes(metric.agentId));
+    return await db.select().from(performanceMetrics)
+      .where(eq(performanceMetrics.callId, callId));
   }
 
   async getPerformanceMetricsByAgent(userId: string, agentId: string): Promise<PerformanceMetric[]> {
-    const allowedAgentIds = await this.getAssignedAgentIds(userId);
+    const assignedAgentIds = await this.getAssignedAgentIds(userId);
+    if (!assignedAgentIds.includes(agentId)) return [];
     
-    // Check if user has access to this agent
-    if (!allowedAgentIds.includes(agentId)) {
-      return [];
-    }
-    
-    return Array.from(this.performanceMetrics.values()).filter(metric => metric.agentId === agentId);
+    return await db.select().from(performanceMetrics)
+      .where(eq(performanceMetrics.agentId, agentId))
+      .orderBy(desc(performanceMetrics.timestamp));
   }
 
   async getPerformanceMetrics(userId: string): Promise<PerformanceMetric[]> {
-    const allowedAgentIds = await this.getAssignedAgentIds(userId);
-    const metrics = Array.from(this.performanceMetrics.values());
+    const assignedAgentIds = await this.getAssignedAgentIds(userId);
+    if (assignedAgentIds.length === 0) return [];
     
-    // Filter metrics based on user's assigned agents
-    return metrics.filter(metric => allowedAgentIds.includes(metric.agentId));
+    return await db.select().from(performanceMetrics)
+      .where(inArray(performanceMetrics.agentId, assignedAgentIds))
+      .orderBy(desc(performanceMetrics.timestamp));
   }
 
-  async createPerformanceMetric(insertMetric: InsertPerformanceMetric): Promise<PerformanceMetric> {
-    const metric: PerformanceMetric = {
-      ...insertMetric,
-      id: randomUUID(),
-      timestamp: new Date(),
-      speechToTextLatency: insertMetric.speechToTextLatency || null,
-      elevenLabsLatency: insertMetric.elevenLabsLatency || null,
-      liveKitLatency: insertMetric.liveKitLatency || null,
-      totalLatency: insertMetric.totalLatency || null,
-      responseTime: insertMetric.responseTime || null,
-      audioQuality: insertMetric.audioQuality || null,
-      successRate: insertMetric.successRate || null,
-    };
-    this.performanceMetrics.set(metric.id, metric);
-    return metric;
+  async createPerformanceMetric(metric: InsertPerformanceMetric): Promise<PerformanceMetric> {
+    const [created] = await db.insert(performanceMetrics).values(metric).returning();
+    return created;
   }
 
-  // LiveKit room methods - WITH DATA ISOLATION
+  // LiveKit Rooms methods
   async getLiveKitRoom(userId: string, roomId: string): Promise<LiveKitRoom | undefined> {
-    const allowedAgentIds = await this.getAssignedAgentIds(userId);
-    const room = this.liveKitRooms.get(roomId);
-    
-    if (!room) {
-      return undefined;
-    }
-    
-    // Check if any calls in this room belong to allowed agents
-    const roomCalls = Array.from(this.calls.values())
-      .filter(call => call.metadata && (call.metadata as any).roomId === room.roomId);
-    
-    const hasAccess = roomCalls.some(call => allowedAgentIds.includes(call.agentId));
-    
-    if (!hasAccess) {
-      return undefined;
-    }
-    
-    return room;
+    const [room] = await db.select().from(liveKitRooms)
+      .where(eq(liveKitRooms.id, roomId));
+    return room || undefined;
   }
 
   async getAllLiveKitRooms(userId: string): Promise<LiveKitRoom[]> {
-    const allowedAgentIds = await this.getAssignedAgentIds(userId);
-    const rooms = Array.from(this.liveKitRooms.values());
-    
-    // Filter rooms based on whether user has access to calls in those rooms
-    return rooms.filter(room => {
-      const roomCalls = Array.from(this.calls.values())
-        .filter(call => call.metadata && (call.metadata as any).roomId === room.roomId);
-      
-      return roomCalls.some(call => allowedAgentIds.includes(call.agentId));
-    });
+    return await db.select().from(liveKitRooms)
+      .where(eq(liveKitRooms.isActive, true));
   }
 
-  async createLiveKitRoom(insertRoom: InsertLiveKitRoom): Promise<LiveKitRoom> {
-    const room: LiveKitRoom = {
-      ...insertRoom,
-      id: randomUUID(),
-      createdAt: new Date(),
-      isActive: insertRoom.isActive ?? true,
-      participantCount: insertRoom.participantCount || 0,
-    };
-    this.liveKitRooms.set(room.id, room);
-    return room;
+  async createLiveKitRoom(room: InsertLiveKitRoom): Promise<LiveKitRoom> {
+    const [created] = await db.insert(liveKitRooms).values(room).returning();
+    return created;
   }
 
   async updateLiveKitRoom(id: string, updates: Partial<LiveKitRoom>): Promise<LiveKitRoom | undefined> {
-    const room = this.liveKitRooms.get(id);
-    if (!room) return undefined;
-    
-    const updatedRoom = { ...room, ...updates };
-    this.liveKitRooms.set(id, updatedRoom);
-    return updatedRoom;
+    const [updated] = await db.update(liveKitRooms)
+      .set(updates)
+      .where(eq(liveKitRooms.id, id))
+      .returning();
+    return updated || undefined;
   }
 
-  // Dashboard methods - WITH DATA ISOLATION
-  async getDashboardStats(userId: string) {
-    const allowedAgentIds = await this.getAssignedAgentIds(userId);
+  // Dashboard stats
+  async getDashboardStats(userId: string): Promise<{
+    totalCalls: number;
+    avgHandleTime: string;
+    elevenLabsLatencyP95: number;
+    activeRooms: number;
+    callVolumeData: Array<{ time: string; elevenlabs: number; livekit: number }>;
+    recentCalls: Call[];
+  }> {
+    const assignedAgentIds = await this.getAssignedAgentIds(userId);
     
-    // Get filtered calls based on user's assigned agents
-    const allCalls = Array.from(this.calls.values());
-    const calls = allCalls.filter(call => allowedAgentIds.includes(call.agentId));
-    
-    // Get only rooms that have calls from allowed agents
-    const activeRooms = Array.from(this.liveKitRooms.values()).filter(room => {
-      if (!room.isActive) return false;
-      
-      // Check if any calls in this room belong to allowed agents
-      const roomCalls = allCalls.filter(call => 
-        call.metadata && (call.metadata as any).roomId === room.roomId
-      );
-      
-      return roomCalls.some(call => allowedAgentIds.includes(call.agentId));
-    });
-    
-    // Get filtered metrics based on user's assigned agents
-    const allMetrics = Array.from(this.performanceMetrics.values());
-    const metrics = allMetrics.filter(m => allowedAgentIds.includes(m.agentId));
+    if (assignedAgentIds.length === 0) {
+      return {
+        totalCalls: 0,
+        avgHandleTime: "0s",
+        elevenLabsLatencyP95: 0,
+        activeRooms: 0,
+        callVolumeData: [],
+        recentCalls: []
+      };
+    }
 
-    const totalCalls = calls.length;
-    const avgHandleTime = calls.length > 0 
-      ? Math.floor(calls.reduce((sum, call) => sum + (call.duration || 0), 0) / calls.length)
-      : 0;
+    // Get all calls for assigned agents
+    const allCalls = await db.select().from(calls)
+      .where(inArray(calls.agentId, assignedAgentIds));
     
-    const avgHandleTimeFormatted = `${Math.floor(avgHandleTime / 60)}m ${avgHandleTime % 60}s`;
+    // Calculate average handle time
+    const totalDuration = allCalls.reduce((sum, call) => sum + (call.duration || 0), 0);
+    const avgDuration = allCalls.length > 0 ? totalDuration / allCalls.length : 0;
+    const minutes = Math.floor(avgDuration / 60);
+    const seconds = Math.floor(avgDuration % 60);
+    const avgHandleTime = `${minutes}m ${seconds}s`;
 
+    // Get P95 latency for ElevenLabs
+    const metrics = await db.select().from(performanceMetrics)
+      .where(inArray(performanceMetrics.agentId, assignedAgentIds));
+    
     const elevenLabsLatencies = metrics
-      .filter(m => m.elevenLabsLatency && m.elevenLabsLatency > 0)
-      .map(m => m.elevenLabsLatency!)
+      .map(m => m.elevenLabsLatency || 0)
+      .filter(l => l > 0)
       .sort((a, b) => a - b);
     
-    const elevenLabsLatencyP95 = elevenLabsLatencies.length > 0 
-      ? elevenLabsLatencies[Math.floor(elevenLabsLatencies.length * 0.95)]
-      : 0;
+    const p95Index = Math.floor(elevenLabsLatencies.length * 0.95);
+    const elevenLabsLatencyP95 = elevenLabsLatencies[p95Index] || 0;
 
-    // Generate call volume data based on actual calls from allowed agents
-    const callVolumeData = Array.from({ length: 7 }, (_, i) => {
-      const date = new Date();
-      date.setDate(date.getDate() - (6 - i));
-      const dayStart = new Date(date);
-      dayStart.setHours(0, 0, 0, 0);
-      const dayEnd = new Date(date);
-      dayEnd.setHours(23, 59, 59, 999);
+    // Get active rooms
+    const activeRooms = await db.select().from(liveKitRooms)
+      .where(eq(liveKitRooms.isActive, true));
+
+    // Get agents for volume data
+    const allAgents = await db.select().from(agents)
+      .where(inArray(agents.id, assignedAgentIds));
+
+    // Generate call volume data for the last 7 days
+    const callVolumeData = [];
+    const now = new Date();
+    for (let i = 6; i >= 0; i--) {
+      const date = new Date(now);
+      date.setDate(date.getDate() - i);
+      date.setHours(0, 0, 0, 0);
+      const nextDate = new Date(date);
+      nextDate.setDate(nextDate.getDate() + 1);
       
-      // Count actual calls from that day for allowed agents
-      const dayCalls = calls.filter(call => {
-        const callTime = call.startTime.getTime();
-        return callTime >= dayStart.getTime() && callTime <= dayEnd.getTime();
+      const daysCalls = allCalls.filter(call => {
+        const callTime = new Date(call.startTime);
+        return callTime >= date && callTime < nextDate;
       });
       
-      // Count by platform (get agent platform)
-      let elevenLabsCount = 0;
-      let liveKitCount = 0;
+      const elevenLabsCalls = daysCalls.filter(call => {
+        const agent = allAgents.find(a => a.id === call.agentId);
+        return agent?.platform === 'elevenlabs';
+      }).length;
       
-      dayCalls.forEach(call => {
-        const agent = this.agents.get(call.agentId);
-        if (agent?.platform === 'elevenlabs') {
-          elevenLabsCount++;
-        } else if (agent?.platform === 'livekit') {
-          liveKitCount++;
-        }
+      const livekitCalls = daysCalls.filter(call => {
+        const agent = allAgents.find(a => a.id === call.agentId);
+        return agent?.platform === 'livekit';
+      }).length;
+      
+      callVolumeData.push({
+        time: date.toLocaleDateString('en-US', { weekday: 'short' }),
+        elevenlabs: elevenLabsCalls,
+        livekit: livekitCalls
       });
-      
-      // If no data for that day, use small random values for demo
-      if (elevenLabsCount === 0 && liveKitCount === 0) {
-        elevenLabsCount = Math.floor(Math.random() * 10) + 5;
-        liveKitCount = Math.floor(Math.random() * 8) + 3;
-      }
-      
-      return {
-        time: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-        elevenlabs: elevenLabsCount,
-        livekit: liveKitCount,
-      };
-    });
+    }
 
-    const recentCalls = calls
-      .sort((a, b) => b.startTime.getTime() - a.startTime.getTime())
+    // Get recent calls
+    const recentCalls = allCalls
+      .sort((a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime())
       .slice(0, 5);
 
     return {
-      totalCalls,
-      avgHandleTime: avgHandleTimeFormatted,
+      totalCalls: allCalls.length,
+      avgHandleTime,
       elevenLabsLatencyP95,
       activeRooms: activeRooms.length,
       callVolumeData,
-      recentCalls,
+      recentCalls
     };
   }
 
-  // Advanced Search Implementation
+  // Search calls
   async searchCalls(userId: string, params: {
     q?: string;
     agentId?: string;
@@ -1046,165 +850,123 @@ export class MemStorage implements IStorage {
     pageSize: number;
     pages: number;
   }> {
-    // Get user's accessible agents
-    const userAgentIds = await this.getAssignedAgentIds(userId);
+    const assignedAgentIds = await this.getAssignedAgentIds(userId);
+    if (assignedAgentIds.length === 0) {
+      return { calls: [], total: 0, page: 1, pageSize: 10, pages: 0 };
+    }
+
+    const page = params.page || 1;
+    const limit = params.limit || 10;
+    const offset = (page - 1) * limit;
+
+    // Build where conditions
+    const conditions = [inArray(calls.agentId, assignedAgentIds)];
     
-    // Start with all calls
-    let filteredCalls = Array.from(this.calls.values());
+    if (params.agentId) {
+      conditions.push(eq(calls.agentId, params.agentId));
+    }
     
-    // Filter by user's accessible agents only
-    filteredCalls = filteredCalls.filter(call => 
-      userAgentIds.includes(call.agentId)
-    );
+    if (params.sentiment && params.sentiment.length > 0) {
+      conditions.push(inArray(calls.sentiment, params.sentiment as ("positive" | "negative" | "neutral")[]));
+    }
     
-    // Apply search query
+    if (params.dateFrom) {
+      conditions.push(gte(calls.startTime, params.dateFrom));
+    }
+    
+    if (params.dateTo) {
+      conditions.push(lte(calls.startTime, params.dateTo));
+    }
+    
+    if (params.durationMin !== undefined) {
+      conditions.push(gte(calls.duration, params.durationMin));
+    }
+    
+    if (params.durationMax !== undefined) {
+      conditions.push(lte(calls.duration, params.durationMax));
+    }
+    
+    if (params.hasRecording === true) {
+      conditions.push(isNotNull(calls.recordingUrl));
+    } else if (params.hasRecording === false) {
+      conditions.push(isNull(calls.recordingUrl));
+    }
+
+    // Get total count
+    const [{ count }] = await db.select({ count: sql<number>`count(*)` })
+      .from(calls)
+      .where(and(...conditions));
+
+    // Build order by
+    let orderByClause;
+    const sortOrder = params.sortOrder === 'asc' ? asc : desc;
+    switch (params.sortBy) {
+      case 'duration':
+        orderByClause = sortOrder(calls.duration);
+        break;
+      case 'sentiment':
+        orderByClause = sortOrder(calls.sentiment);
+        break;
+      default:
+        orderByClause = sortOrder(calls.startTime);
+    }
+
+    // Get paginated results
+    const results = await db.select().from(calls)
+      .where(and(...conditions))
+      .orderBy(orderByClause)
+      .limit(limit)
+      .offset(offset);
+
+    // Filter by search query if provided (in-memory for transcript/outcome search)
+    let filteredResults = results;
     if (params.q) {
       const query = params.q.toLowerCase();
-      filteredCalls = filteredCalls.filter(call => {
-        // Search in transcript
-        const transcriptMatch = Array.isArray(call.transcript) && 
-          (call.transcript as any[]).some((entry: any) => 
-            entry.text?.toLowerCase().includes(query)
-          );
-        
-        // Search in agent name
-        const agent = this.agents.get(call.agentId);
-        const agentMatch = agent?.name.toLowerCase().includes(query);
-        
-        // Search in analysis summary
-        const analysisMatch = (call.analysis as any)?.summary?.toLowerCase().includes(query);
-        
-        // Search in outcome
-        const outcomeMatch = call.outcome?.toLowerCase().includes(query);
-        
-        return transcriptMatch || agentMatch || analysisMatch || outcomeMatch;
+      filteredResults = results.filter(call => {
+        const transcriptText = JSON.stringify(call.transcript || '').toLowerCase();
+        const outcomeText = (call.outcome || '').toLowerCase();
+        const analysisText = JSON.stringify(call.analysis || '').toLowerCase();
+        return transcriptText.includes(query) || 
+               outcomeText.includes(query) || 
+               analysisText.includes(query);
       });
     }
-    
-    // Filter by agent
-    if (params.agentId) {
-      filteredCalls = filteredCalls.filter(call => call.agentId === params.agentId);
-    }
-    
-    // Filter by sentiment
-    if (params.sentiment && params.sentiment.length > 0) {
-      filteredCalls = filteredCalls.filter(call => 
-        params.sentiment!.includes(call.sentiment || 'neutral')
-      );
-    }
-    
-    // Filter by date range
-    if (params.dateFrom) {
-      filteredCalls = filteredCalls.filter(call => 
-        new Date(call.startTime) >= params.dateFrom!
-      );
-    }
-    if (params.dateTo) {
-      filteredCalls = filteredCalls.filter(call => 
-        new Date(call.startTime) <= params.dateTo!
-      );
-    }
-    
-    // Filter by duration
-    if (params.durationMin !== undefined) {
-      filteredCalls = filteredCalls.filter(call => 
-        (call.duration || 0) >= params.durationMin!
-      );
-    }
-    if (params.durationMax !== undefined) {
-      filteredCalls = filteredCalls.filter(call => 
-        (call.duration || 0) <= params.durationMax!
-      );
-    }
-    
-    // Filter by recording status
-    if (params.hasRecording !== undefined) {
-      filteredCalls = filteredCalls.filter(call => 
-        params.hasRecording ? !!call.recordingUrl : !call.recordingUrl
-      );
-    }
-    
-    // Sort results
-    const sortBy = params.sortBy || 'date';
-    const sortOrder = params.sortOrder || 'desc';
-    
-    filteredCalls.sort((a, b) => {
-      let comparison = 0;
-      
-      switch (sortBy) {
-        case 'date':
-          comparison = new Date(a.startTime).getTime() - new Date(b.startTime).getTime();
-          break;
-        case 'duration':
-          comparison = (a.duration || 0) - (b.duration || 0);
-          break;
-        case 'sentiment':
-          const sentimentOrder = { 'positive': 3, 'neutral': 2, 'negative': 1 };
-          const aScore = sentimentOrder[a.sentiment as keyof typeof sentimentOrder] || 2;
-          const bScore = sentimentOrder[b.sentiment as keyof typeof sentimentOrder] || 2;
-          comparison = aScore - bScore;
-          break;
-      }
-      
-      return sortOrder === 'asc' ? comparison : -comparison;
-    });
-    
-    // Pagination
-    const page = params.page || 1;
-    const pageSize = params.limit || 10;
-    const total = filteredCalls.length;
-    const pages = Math.ceil(total / pageSize);
-    const start = (page - 1) * pageSize;
-    const paginatedCalls = filteredCalls.slice(start, start + pageSize);
-    
+
+    const pages = Math.ceil(Number(count) / limit);
+
     return {
-      calls: paginatedCalls,
-      total,
+      calls: filteredResults,
+      total: Number(count),
       page,
-      pageSize,
+      pageSize: limit,
       pages
     };
   }
-  
+
+  // Search suggestions
   async getSearchSuggestions(userId: string, query: string): Promise<string[]> {
-    const userAgentIds = await this.getAssignedAgentIds(userId);
+    const allCalls = await this.getAllCalls(userId);
     const suggestions = new Set<string>();
-    const lowerQuery = query.toLowerCase();
     
-    // Get agent names
-    for (const agentId of userAgentIds) {
-      const agent = this.agents.get(agentId);
-      if (agent && agent.name.toLowerCase().includes(lowerQuery)) {
-        suggestions.add(agent.name);
+    allCalls.forEach(call => {
+      if (call.outcome && call.outcome.toLowerCase().includes(query.toLowerCase())) {
+        suggestions.add(call.outcome);
       }
-    }
-    
-    // Get common words from transcripts (limited for performance)
-    const calls = Array.from(this.calls.values())
-      .filter(call => userAgentIds.includes(call.agentId))
-      .slice(0, 100); // Limit to recent 100 calls
-    
-    for (const call of calls) {
-      if (Array.isArray(call.transcript)) {
-        const transcript = call.transcript as any[];
-        for (const entry of transcript.slice(0, 10)) { // First 10 transcript entries
-          if (entry.text) {
-            const words = entry.text.split(/\s+/).slice(0, 5); // First 5 words per entry
-            for (const word of words) {
-              if (word.toLowerCase().includes(lowerQuery) && word.length > 3) {
-                suggestions.add(word);
-                if (suggestions.size >= 10) break;
-              }
-            }
+      
+      const analysis = call.analysis as any;
+      if (analysis?.topics) {
+        analysis.topics.forEach((topic: string) => {
+          if (topic.toLowerCase().includes(query.toLowerCase())) {
+            suggestions.add(topic);
           }
-        }
+        });
       }
-      if (suggestions.size >= 10) break;
-    }
+    });
     
-    return Array.from(suggestions).slice(0, 10);
+    return Array.from(suggestions).slice(0, 5);
   }
-  
+
+  // Analytics data
   async getAnalyticsData(userId: string, params: {
     dateFrom: Date;
     dateTo: Date;
@@ -1212,144 +974,156 @@ export class MemStorage implements IStorage {
     compareTo?: Date;
     groupBy?: 'hour' | 'day' | 'week' | 'month';
   }): Promise<any> {
-    const userAgentIds = await this.getAssignedAgentIds(userId);
-    
-    // Get calls in date range
-    const calls = Array.from(this.calls.values())
-      .filter(call => {
-        const callDate = new Date(call.startTime);
-        return userAgentIds.includes(call.agentId) &&
-               callDate >= params.dateFrom &&
-               callDate <= params.dateTo;
-      });
-    
-    // Calculate metrics
-    const totalCalls = calls.length;
-    const avgDuration = calls.reduce((sum, call) => sum + (call.duration || 0), 0) / (totalCalls || 1);
-    
-    const sentimentScores = { 'positive': 1, 'neutral': 0, 'negative': -1 };
-    const avgSentiment = calls.reduce((sum, call) => 
-      sum + (sentimentScores[call.sentiment as keyof typeof sentimentScores] || 0), 0
-    ) / (totalCalls || 1);
-    
-    const resolutionRate = calls.filter(call => 
-      call.outcome === 'resolved' || call.outcome === 'Sale Closed' || call.outcome === 'Resolved'
-    ).length / (totalCalls || 1);
-    
-    // Get comparison data if requested
-    let comparisons;
-    if (params.compareFrom && params.compareTo) {
-      const compareCalls = Array.from(this.calls.values())
-        .filter(call => {
-          const callDate = new Date(call.startTime);
-          return userAgentIds.includes(call.agentId) &&
-                 callDate >= params.compareFrom! &&
-                 callDate <= params.compareTo!;
-        });
-      
-      comparisons = {
-        totalCalls: compareCalls.length,
-        avgDuration: compareCalls.reduce((sum, call) => sum + (call.duration || 0), 0) / (compareCalls.length || 1),
-        avgSentiment: compareCalls.reduce((sum, call) => 
-          sum + (sentimentScores[call.sentiment as keyof typeof sentimentScores] || 0), 0
-        ) / (compareCalls.length || 1),
-        resolutionRate: compareCalls.filter(call => 
-          call.outcome === 'resolved' || call.outcome === 'Sale Closed' || call.outcome === 'Resolved'
-        ).length / (compareCalls.length || 1)
+    const assignedAgentIds = await this.getAssignedAgentIds(userId);
+    if (assignedAgentIds.length === 0) {
+      return {
+        metrics: {
+          totalCalls: 0,
+          avgDuration: 0,
+          avgSentiment: 0,
+          resolutionRate: 0
+        },
+        trends: [],
+        agentPerformance: [],
+        peakHours: []
       };
     }
+
+    // Get calls for the main period
+    const mainCalls = await db.select().from(calls)
+      .where(and(
+        inArray(calls.agentId, assignedAgentIds),
+        between(calls.startTime, params.dateFrom, params.dateTo)
+      ));
+
+    // Calculate main metrics
+    const totalCalls = mainCalls.length;
+    const avgDuration = totalCalls > 0 
+      ? mainCalls.reduce((sum, c) => sum + (c.duration || 0), 0) / totalCalls 
+      : 0;
     
-    // Calculate trends (simplified for now)
+    const sentimentScores = { positive: 1, neutral: 0, negative: -1 };
+    const avgSentiment = totalCalls > 0
+      ? mainCalls.reduce((sum, c) => sum + (sentimentScores[c.sentiment || 'neutral'] || 0), 0) / totalCalls
+      : 0;
+    
+    const resolutionRate = totalCalls > 0
+      ? mainCalls.filter(c => c.outcome === 'Resolved' || c.outcome === 'Sale Closed').length / totalCalls
+      : 0;
+
+    // Get comparison metrics if dates provided
+    let comparisons;
+    if (params.compareFrom && params.compareTo) {
+      const compareCalls = await db.select().from(calls)
+        .where(and(
+          inArray(calls.agentId, assignedAgentIds),
+          between(calls.startTime, params.compareFrom, params.compareTo)
+        ));
+      
+      const compareTotalCalls = compareCalls.length;
+      const compareAvgDuration = compareTotalCalls > 0 
+        ? compareCalls.reduce((sum, c) => sum + (c.duration || 0), 0) / compareTotalCalls 
+        : 0;
+      
+      const compareAvgSentiment = compareTotalCalls > 0
+        ? compareCalls.reduce((sum, c) => sum + (sentimentScores[c.sentiment || 'neutral'] || 0), 0) / compareTotalCalls
+        : 0;
+      
+      const compareResolutionRate = compareTotalCalls > 0
+        ? compareCalls.filter(c => c.outcome === 'Resolved' || c.outcome === 'Sale Closed').length / compareTotalCalls
+        : 0;
+      
+      comparisons = {
+        totalCalls: compareTotalCalls,
+        avgDuration: compareAvgDuration,
+        avgSentiment: compareAvgSentiment,
+        resolutionRate: compareResolutionRate
+      };
+    }
+
+    // Calculate trends (simplified for database implementation)
     const trends = [];
     const groupBy = params.groupBy || 'day';
+    const current = new Date(params.dateFrom);
     
-    // Group calls by time period
-    const grouped = new Map<string, Call[]>();
-    for (const call of calls) {
-      const date = new Date(call.startTime);
-      let key = '';
+    while (current <= params.dateTo) {
+      const periodStart = new Date(current);
+      const periodEnd = new Date(current);
       
-      switch (groupBy) {
-        case 'hour':
-          key = `${date.toISOString().slice(0, 13)}:00`;
-          break;
-        case 'day':
-          key = date.toISOString().slice(0, 10);
-          break;
-        case 'week':
-          const weekStart = new Date(date);
-          weekStart.setDate(date.getDate() - date.getDay());
-          key = weekStart.toISOString().slice(0, 10);
-          break;
-        case 'month':
-          key = date.toISOString().slice(0, 7);
-          break;
+      if (groupBy === 'hour') {
+        periodEnd.setHours(periodEnd.getHours() + 1);
+      } else if (groupBy === 'day') {
+        periodEnd.setDate(periodEnd.getDate() + 1);
+      } else if (groupBy === 'week') {
+        periodEnd.setDate(periodEnd.getDate() + 7);
+      } else {
+        periodEnd.setMonth(periodEnd.getMonth() + 1);
       }
       
-      if (!grouped.has(key)) {
-        grouped.set(key, []);
-      }
-      grouped.get(key)!.push(call);
-    }
-    
-    // Calculate metrics for each time period
-    for (const [timestamp, groupCalls] of Array.from(grouped.entries())) {
-      const sentimentCounts = { positive: 0, negative: 0, neutral: 0 };
-      for (const call of groupCalls) {
-        const sentiment = call.sentiment || 'neutral';
-        sentimentCounts[sentiment as keyof typeof sentimentCounts]++;
-      }
+      const periodCalls = mainCalls.filter(c => 
+        new Date(c.startTime) >= periodStart && new Date(c.startTime) < periodEnd
+      );
+      
+      const sentimentCounts = {
+        positive: periodCalls.filter(c => c.sentiment === 'positive').length,
+        negative: periodCalls.filter(c => c.sentiment === 'negative').length,
+        neutral: periodCalls.filter(c => c.sentiment === 'neutral').length
+      };
       
       trends.push({
-        timestamp,
-        calls: groupCalls.length,
-        avgDuration: groupCalls.reduce((sum: number, call: Call) => sum + (call.duration || 0), 0) / groupCalls.length,
+        timestamp: periodStart.toISOString(),
+        calls: periodCalls.length,
+        avgDuration: periodCalls.length > 0 
+          ? periodCalls.reduce((sum, c) => sum + (c.duration || 0), 0) / periodCalls.length 
+          : 0,
         sentiment: sentimentCounts
       });
+      
+      current.setTime(periodEnd.getTime());
     }
+
+    // Get agent performance
+    const agentsList = await db.select().from(agents)
+      .where(inArray(agents.id, assignedAgentIds));
     
-    // Agent performance
-    const agentPerformance = [];
-    for (const agentId of userAgentIds) {
-      const agent = this.agents.get(agentId);
-      if (!agent) continue;
+    const agentPerformance = agentsList.map(agent => {
+      const agentCalls = mainCalls.filter(c => c.agentId === agent.id);
+      const agentTotalCalls = agentCalls.length;
       
-      const agentCalls = calls.filter(call => call.agentId === agentId);
-      if (agentCalls.length === 0) continue;
-      
-      agentPerformance.push({
-        agentId,
+      return {
+        agentId: agent.id,
         agentName: agent.name,
-        totalCalls: agentCalls.length,
-        avgDuration: agentCalls.reduce((sum: number, call: Call) => sum + (call.duration || 0), 0) / agentCalls.length,
-        avgSentiment: agentCalls.reduce((sum: number, call: Call) => 
-          sum + (sentimentScores[call.sentiment as keyof typeof sentimentScores] || 0), 0
-        ) / agentCalls.length,
-        resolutionRate: agentCalls.filter(call => 
-          call.outcome === 'resolved' || call.outcome === 'Sale Closed' || call.outcome === 'Resolved'
-        ).length / agentCalls.length
-      });
+        totalCalls: agentTotalCalls,
+        avgDuration: agentTotalCalls > 0 
+          ? agentCalls.reduce((sum, c) => sum + (c.duration || 0), 0) / agentTotalCalls 
+          : 0,
+        avgSentiment: agentTotalCalls > 0
+          ? agentCalls.reduce((sum, c) => sum + (sentimentScores[c.sentiment || 'neutral'] || 0), 0) / agentTotalCalls
+          : 0,
+        resolutionRate: agentTotalCalls > 0
+          ? agentCalls.filter(c => c.outcome === 'Resolved' || c.outcome === 'Sale Closed').length / agentTotalCalls
+          : 0
+      };
+    });
+
+    // Calculate peak hours
+    const hourStats = new Map<number, { calls: number; totalWait: number }>();
+    for (let hour = 0; hour < 24; hour++) {
+      hourStats.set(hour, { calls: 0, totalWait: 0 });
     }
     
-    // Peak hours analysis
-    const hourlyStats = new Map<number, { calls: number; totalWait: number }>();
-    for (const call of calls) {
+    mainCalls.forEach(call => {
       const hour = new Date(call.startTime).getHours();
-      if (!hourlyStats.has(hour)) {
-        hourlyStats.set(hour, { calls: 0, totalWait: 0 });
-      }
-      const stats = hourlyStats.get(hour)!;
+      const stats = hourStats.get(hour)!;
       stats.calls++;
-      // Simulate wait time based on metadata or use a default
-      const metadata = call.metadata as any;
-      stats.totalWait += metadata?.waitTime || 30;
-    }
+      stats.totalWait += Math.random() * 30; // Simulated wait time
+    });
     
-    const peakHours = Array.from(hourlyStats.entries())
+    const peakHours = Array.from(hourStats.entries())
       .map(([hour, stats]) => ({
         hour,
         calls: stats.calls,
-        avgWaitTime: stats.totalWait / stats.calls
+        avgWaitTime: stats.calls > 0 ? stats.totalWait / stats.calls : 0
       }))
       .sort((a, b) => b.calls - a.calls);
     
@@ -1369,74 +1143,55 @@ export class MemStorage implements IStorage {
 
   // Accounts Management
   async getAccount(accountId: string): Promise<Account | undefined> {
-    return this.accounts.get(accountId);
+    const [account] = await db.select().from(accounts)
+      .where(eq(accounts.id, accountId));
+    return account || undefined;
   }
 
   async getAllAccounts(): Promise<Account[]> {
-    return Array.from(this.accounts.values());
+    return await db.select().from(accounts);
   }
 
   async getAccountsByService(service: 'elevenlabs' | 'livekit'): Promise<Account[]> {
-    return Array.from(this.accounts.values()).filter(account => account.service === service);
+    return await db.select().from(accounts)
+      .where(eq(accounts.service, service));
   }
 
   async createAccount(account: InsertAccount): Promise<Account> {
-    const id = randomUUID();
-    const newAccount: Account = {
-      id,
-      ...account,
-      lastSynced: null,
-      isActive: account.isActive ?? true,
-      metadata: account.metadata || null,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
-    this.accounts.set(id, newAccount);
-    return newAccount;
+    const [created] = await db.insert(accounts).values(account).returning();
+    return created;
   }
 
   async updateAccount(accountId: string, updates: Partial<Account>): Promise<Account | undefined> {
-    const existing = this.accounts.get(accountId);
-    if (!existing) {
-      return undefined;
-    }
-    
-    const updated: Account = {
-      ...existing,
-      ...updates,
-      id: existing.id, // Never change the ID
-      updatedAt: new Date(),
-    };
-    this.accounts.set(accountId, updated);
-    return updated;
+    const [updated] = await db.update(accounts)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(accounts.id, accountId))
+      .returning();
+    return updated || undefined;
   }
 
   async deleteAccount(accountId: string): Promise<boolean> {
-    if (this.accounts.has(accountId)) {
-      this.accounts.delete(accountId);
-      return true;
-    }
-    return false;
+    const result = await db.delete(accounts)
+      .where(eq(accounts.id, accountId));
+    return (result.rowCount ?? 0) > 0;
   }
 
   // Permissions Management
   async getUserPermissions(userId: string): Promise<Record<string, boolean>> {
-    const user = this.users.get(userId);
+    const user = await this.getUser(userId);
     if (!user) return {};
     return (user.permissions as Record<string, boolean>) || {};
   }
 
   async updateUserPermissions(userId: string, permissions: Record<string, boolean>): Promise<boolean> {
-    const user = this.users.get(userId);
-    if (!user) return false;
-    
-    user.permissions = permissions;
-    this.users.set(userId, user);
-    return true;
+    const result = await db.update(users)
+      .set({ permissions })
+      .where(eq(users.id, userId));
+    return (result.rowCount ?? 0) > 0;
   }
 
   async checkUserPermission(userId: string, permission: string): Promise<boolean> {
-    const user = this.users.get(userId);
+    const user = await this.getUser(userId);
     if (!user) return false;
     
     // Admins have all permissions
@@ -1447,4 +1202,5 @@ export class MemStorage implements IStorage {
   }
 }
 
-export const storage = new MemStorage();
+// Export the DatabaseStorage instance instead of MemStorage
+export const storage = new DatabaseStorage();
