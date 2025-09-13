@@ -4,6 +4,7 @@ import { storage } from "./storage";
 import { insertUserSchema, insertAgentSchema, insertCallSchema } from "@shared/schema";
 import { hashPassword, validatePassword, requireAuth, requireAdmin } from "./auth";
 import { z } from "zod";
+import * as livekit from "./livekit";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Authentication routes
@@ -345,6 +346,76 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Advanced Search API
+  app.get("/api/calls/search", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const params = {
+        q: req.query.q as string | undefined,
+        agentId: req.query.agentId as string | undefined,
+        sentiment: req.query.sentiment ? (Array.isArray(req.query.sentiment) ? req.query.sentiment : [req.query.sentiment]) as string[] : undefined,
+        dateFrom: req.query.dateFrom ? new Date(req.query.dateFrom as string) : undefined,
+        dateTo: req.query.dateTo ? new Date(req.query.dateTo as string) : undefined,
+        durationMin: req.query.durationMin ? parseInt(req.query.durationMin as string) : undefined,
+        durationMax: req.query.durationMax ? parseInt(req.query.durationMax as string) : undefined,
+        hasRecording: req.query.hasRecording ? req.query.hasRecording === 'true' : undefined,
+        sortBy: req.query.sortBy as 'date' | 'duration' | 'sentiment' | undefined,
+        sortOrder: req.query.sortOrder as 'asc' | 'desc' | undefined,
+        page: req.query.page ? parseInt(req.query.page as string) : 1,
+        limit: req.query.limit ? parseInt(req.query.limit as string) : 10,
+      };
+      
+      const result = await storage.searchCalls(req.user!.id, params);
+      
+      // Get agents to include in response
+      const agents = await storage.getAllAgents(req.user!.id);
+      const agentsMap = new Map(agents.map(agent => [agent.id, agent]));
+      
+      // Add agent details to each call
+      const callsWithAgents = result.calls.map(call => ({
+        ...call,
+        agent: agentsMap.get(call.agentId),
+      }));
+      
+      res.json({
+        ...result,
+        calls: callsWithAgents
+      });
+    } catch (error) {
+      console.error('Search error:', error);
+      res.status(500).json({ message: "Failed to search calls" });
+    }
+  });
+
+  // Search suggestions
+  app.get("/api/calls/suggestions", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const query = req.query.q as string || '';
+      const suggestions = await storage.getSearchSuggestions(req.user!.id, query);
+      res.json(suggestions);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to get suggestions" });
+    }
+  });
+
+  // Analytics data
+  app.get("/api/analytics", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const params = {
+        dateFrom: req.query.dateFrom ? new Date(req.query.dateFrom as string) : new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+        dateTo: req.query.dateTo ? new Date(req.query.dateTo as string) : new Date(),
+        compareFrom: req.query.compareFrom ? new Date(req.query.compareFrom as string) : undefined,
+        compareTo: req.query.compareTo ? new Date(req.query.compareTo as string) : undefined,
+        groupBy: req.query.groupBy as 'hour' | 'day' | 'week' | 'month' | undefined,
+      };
+      
+      const analyticsData = await storage.getAnalyticsData(req.user!.id, params);
+      res.json(analyticsData);
+    } catch (error) {
+      console.error('Analytics error:', error);
+      res.status(500).json({ message: "Failed to fetch analytics data" });
+    }
+  });
+
   app.get("/api/calls/:id", requireAuth, async (req: Request, res: Response) => {
     try {
       const call = await storage.getCall(req.user!.id, req.params.id);
@@ -381,11 +452,127 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // LiveKit room routes - Protected with data isolation
   app.get("/api/livekit/rooms", requireAuth, async (req: Request, res: Response) => {
     try {
-      const rooms = await storage.getAllLiveKitRooms(req.user!.id);
+      if (!livekit.isLiveKitConfigured()) {
+        return res.status(503).json({ 
+          message: "LiveKit is not configured",
+          status: livekit.getLiveKitStatus()
+        });
+      }
+      
+      const rooms = await livekit.getActiveRooms();
       res.json(rooms);
     } catch (error) {
+      console.error('Error fetching LiveKit rooms:', error);
       res.status(500).json({ message: "Failed to fetch LiveKit rooms" });
     }
+  });
+  
+  // LiveKit metrics route
+  app.get("/api/livekit/metrics", requireAuth, async (req: Request, res: Response) => {
+    try {
+      if (!livekit.isLiveKitConfigured()) {
+        return res.status(503).json({ 
+          message: "LiveKit is not configured",
+          status: livekit.getLiveKitStatus()
+        });
+      }
+      
+      const metrics = await livekit.getLiveKitMetrics();
+      res.json(metrics);
+    } catch (error) {
+      console.error('Error fetching LiveKit metrics:', error);
+      res.status(500).json({ message: "Failed to fetch LiveKit metrics" });
+    }
+  });
+  
+  // Get participants in a specific room
+  app.get("/api/livekit/rooms/:roomName/participants", requireAuth, async (req: Request, res: Response) => {
+    try {
+      if (!livekit.isLiveKitConfigured()) {
+        return res.status(503).json({ 
+          message: "LiveKit is not configured",
+          status: livekit.getLiveKitStatus()
+        });
+      }
+      
+      const participants = await livekit.getRoomParticipants(req.params.roomName);
+      res.json(participants);
+    } catch (error) {
+      console.error('Error fetching room participants:', error);
+      res.status(500).json({ message: "Failed to fetch room participants" });
+    }
+  });
+  
+  // Create access token for a participant
+  app.post("/api/livekit/token", requireAuth, async (req: Request, res: Response) => {
+    try {
+      if (!livekit.isLiveKitConfigured()) {
+        return res.status(503).json({ 
+          message: "LiveKit is not configured",
+          status: livekit.getLiveKitStatus()
+        });
+      }
+      
+      const { roomName, participantIdentity, participantName } = req.body;
+      
+      if (!roomName || !participantIdentity) {
+        return res.status(400).json({ message: "roomName and participantIdentity are required" });
+      }
+      
+      const token = await livekit.createAccessToken(roomName, participantIdentity, participantName);
+      res.json({ token, url: process.env.LIVEKIT_URL });
+    } catch (error) {
+      console.error('Error creating LiveKit token:', error);
+      res.status(500).json({ message: "Failed to create LiveKit token" });
+    }
+  });
+  
+  // Create a new room (Admin only)
+  app.post("/api/livekit/rooms", requireAuth, requireAdmin, async (req: Request, res: Response) => {
+    try {
+      if (!livekit.isLiveKitConfigured()) {
+        return res.status(503).json({ 
+          message: "LiveKit is not configured",
+          status: livekit.getLiveKitStatus()
+        });
+      }
+      
+      const { roomName, emptyTimeout, maxParticipants, metadata } = req.body;
+      
+      if (!roomName) {
+        return res.status(400).json({ message: "roomName is required" });
+      }
+      
+      const room = await livekit.createRoom(roomName, emptyTimeout, maxParticipants, metadata);
+      res.status(201).json(room);
+    } catch (error) {
+      console.error('Error creating LiveKit room:', error);
+      res.status(500).json({ message: "Failed to create LiveKit room" });
+    }
+  });
+  
+  // Delete a room (Admin only)
+  app.delete("/api/livekit/rooms/:roomName", requireAuth, requireAdmin, async (req: Request, res: Response) => {
+    try {
+      if (!livekit.isLiveKitConfigured()) {
+        return res.status(503).json({ 
+          message: "LiveKit is not configured",
+          status: livekit.getLiveKitStatus()
+        });
+      }
+      
+      await livekit.deleteRoom(req.params.roomName);
+      res.status(204).send();
+    } catch (error) {
+      console.error('Error deleting LiveKit room:', error);
+      res.status(500).json({ message: "Failed to delete LiveKit room" });
+    }
+  });
+  
+  // LiveKit configuration status
+  app.get("/api/livekit/status", requireAuth, async (req: Request, res: Response) => {
+    const status = livekit.getLiveKitStatus();
+    res.json(status);
   });
 
   // Performance metrics routes - Protected with data isolation

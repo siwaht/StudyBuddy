@@ -64,6 +64,72 @@ export interface IStorage {
     callVolumeData: Array<{ time: string; elevenlabs: number; livekit: number }>;
     recentCalls: Call[];
   }>;
+
+  // Advanced Search - REQUIRES USER ID FOR DATA ISOLATION
+  searchCalls(userId: string, params: {
+    q?: string;
+    agentId?: string;
+    sentiment?: string[];
+    dateFrom?: Date;
+    dateTo?: Date;
+    durationMin?: number;
+    durationMax?: number;
+    hasRecording?: boolean;
+    sortBy?: 'date' | 'duration' | 'sentiment';
+    sortOrder?: 'asc' | 'desc';
+    page?: number;
+    limit?: number;
+  }): Promise<{
+    calls: Call[];
+    total: number;
+    page: number;
+    pageSize: number;
+    pages: number;
+  }>;
+  
+  // Search suggestions
+  getSearchSuggestions(userId: string, query: string): Promise<string[]>;
+  
+  // Analytics data
+  getAnalyticsData(userId: string, params: {
+    dateFrom: Date;
+    dateTo: Date;
+    compareFrom?: Date;
+    compareTo?: Date;
+    groupBy?: 'hour' | 'day' | 'week' | 'month';
+  }): Promise<{
+    metrics: {
+      totalCalls: number;
+      avgDuration: number;
+      avgSentiment: number;
+      resolutionRate: number;
+      comparisons?: {
+        totalCalls: number;
+        avgDuration: number;
+        avgSentiment: number;
+        resolutionRate: number;
+      };
+    };
+    trends: Array<{
+      timestamp: string;
+      calls: number;
+      avgDuration: number;
+      sentiment: { positive: number; negative: number; neutral: number };
+    }>;
+    agentPerformance: Array<{
+      agentId: string;
+      agentName: string;
+      totalCalls: number;
+      avgDuration: number;
+      avgSentiment: number;
+      resolutionRate: number;
+    }>;
+    peakHours: Array<{
+      hour: number;
+      calls: number;
+      avgWaitTime: number;
+    }>;
+  }>;
 }
 
 export class MemStorage implements IStorage {
@@ -815,6 +881,343 @@ export class MemStorage implements IStorage {
       activeRooms: activeRooms.length,
       callVolumeData,
       recentCalls,
+    };
+  }
+
+  // Advanced Search Implementation
+  async searchCalls(userId: string, params: {
+    q?: string;
+    agentId?: string;
+    sentiment?: string[];
+    dateFrom?: Date;
+    dateTo?: Date;
+    durationMin?: number;
+    durationMax?: number;
+    hasRecording?: boolean;
+    sortBy?: 'date' | 'duration' | 'sentiment';
+    sortOrder?: 'asc' | 'desc';
+    page?: number;
+    limit?: number;
+  }): Promise<{
+    calls: Call[];
+    total: number;
+    page: number;
+    pageSize: number;
+    pages: number;
+  }> {
+    // Get user's accessible agents
+    const userAgentIds = await this.getAssignedAgentIds(userId);
+    
+    // Start with all calls
+    let filteredCalls = Array.from(this.calls.values());
+    
+    // Filter by user's accessible agents only
+    filteredCalls = filteredCalls.filter(call => 
+      userAgentIds.includes(call.agentId)
+    );
+    
+    // Apply search query
+    if (params.q) {
+      const query = params.q.toLowerCase();
+      filteredCalls = filteredCalls.filter(call => {
+        // Search in transcript
+        const transcriptMatch = call.transcript?.some(entry => 
+          entry.text.toLowerCase().includes(query)
+        );
+        
+        // Search in agent name
+        const agent = this.agents.get(call.agentId);
+        const agentMatch = agent?.name.toLowerCase().includes(query);
+        
+        // Search in analysis summary
+        const analysisMatch = call.analysis?.summary?.toLowerCase().includes(query);
+        
+        // Search in outcome
+        const outcomeMatch = call.outcome?.toLowerCase().includes(query);
+        
+        return transcriptMatch || agentMatch || analysisMatch || outcomeMatch;
+      });
+    }
+    
+    // Filter by agent
+    if (params.agentId) {
+      filteredCalls = filteredCalls.filter(call => call.agentId === params.agentId);
+    }
+    
+    // Filter by sentiment
+    if (params.sentiment && params.sentiment.length > 0) {
+      filteredCalls = filteredCalls.filter(call => 
+        params.sentiment!.includes(call.sentiment || 'neutral')
+      );
+    }
+    
+    // Filter by date range
+    if (params.dateFrom) {
+      filteredCalls = filteredCalls.filter(call => 
+        new Date(call.startTime) >= params.dateFrom!
+      );
+    }
+    if (params.dateTo) {
+      filteredCalls = filteredCalls.filter(call => 
+        new Date(call.startTime) <= params.dateTo!
+      );
+    }
+    
+    // Filter by duration
+    if (params.durationMin !== undefined) {
+      filteredCalls = filteredCalls.filter(call => 
+        (call.duration || 0) >= params.durationMin!
+      );
+    }
+    if (params.durationMax !== undefined) {
+      filteredCalls = filteredCalls.filter(call => 
+        (call.duration || 0) <= params.durationMax!
+      );
+    }
+    
+    // Filter by recording status
+    if (params.hasRecording !== undefined) {
+      filteredCalls = filteredCalls.filter(call => 
+        params.hasRecording ? !!call.recordingUrl : !call.recordingUrl
+      );
+    }
+    
+    // Sort results
+    const sortBy = params.sortBy || 'date';
+    const sortOrder = params.sortOrder || 'desc';
+    
+    filteredCalls.sort((a, b) => {
+      let comparison = 0;
+      
+      switch (sortBy) {
+        case 'date':
+          comparison = new Date(a.startTime).getTime() - new Date(b.startTime).getTime();
+          break;
+        case 'duration':
+          comparison = (a.duration || 0) - (b.duration || 0);
+          break;
+        case 'sentiment':
+          const sentimentOrder = { 'positive': 3, 'neutral': 2, 'negative': 1 };
+          const aScore = sentimentOrder[a.sentiment as keyof typeof sentimentOrder] || 2;
+          const bScore = sentimentOrder[b.sentiment as keyof typeof sentimentOrder] || 2;
+          comparison = aScore - bScore;
+          break;
+      }
+      
+      return sortOrder === 'asc' ? comparison : -comparison;
+    });
+    
+    // Pagination
+    const page = params.page || 1;
+    const pageSize = params.limit || 10;
+    const total = filteredCalls.length;
+    const pages = Math.ceil(total / pageSize);
+    const start = (page - 1) * pageSize;
+    const paginatedCalls = filteredCalls.slice(start, start + pageSize);
+    
+    return {
+      calls: paginatedCalls,
+      total,
+      page,
+      pageSize,
+      pages
+    };
+  }
+  
+  async getSearchSuggestions(userId: string, query: string): Promise<string[]> {
+    const userAgentIds = await this.getAssignedAgentIds(userId);
+    const suggestions = new Set<string>();
+    const lowerQuery = query.toLowerCase();
+    
+    // Get agent names
+    for (const agentId of userAgentIds) {
+      const agent = this.agents.get(agentId);
+      if (agent && agent.name.toLowerCase().includes(lowerQuery)) {
+        suggestions.add(agent.name);
+      }
+    }
+    
+    // Get common words from transcripts (limited for performance)
+    const calls = Array.from(this.calls.values())
+      .filter(call => userAgentIds.includes(call.agentId))
+      .slice(0, 100); // Limit to recent 100 calls
+    
+    for (const call of calls) {
+      if (call.transcript) {
+        for (const entry of call.transcript.slice(0, 10)) { // First 10 transcript entries
+          const words = entry.text.split(/\s+/).slice(0, 5); // First 5 words per entry
+          for (const word of words) {
+            if (word.toLowerCase().includes(lowerQuery) && word.length > 3) {
+              suggestions.add(word);
+              if (suggestions.size >= 10) break;
+            }
+          }
+        }
+      }
+      if (suggestions.size >= 10) break;
+    }
+    
+    return Array.from(suggestions).slice(0, 10);
+  }
+  
+  async getAnalyticsData(userId: string, params: {
+    dateFrom: Date;
+    dateTo: Date;
+    compareFrom?: Date;
+    compareTo?: Date;
+    groupBy?: 'hour' | 'day' | 'week' | 'month';
+  }): Promise<any> {
+    const userAgentIds = await this.getAssignedAgentIds(userId);
+    
+    // Get calls in date range
+    const calls = Array.from(this.calls.values())
+      .filter(call => {
+        const callDate = new Date(call.startTime);
+        return userAgentIds.includes(call.agentId) &&
+               callDate >= params.dateFrom &&
+               callDate <= params.dateTo;
+      });
+    
+    // Calculate metrics
+    const totalCalls = calls.length;
+    const avgDuration = calls.reduce((sum, call) => sum + (call.duration || 0), 0) / (totalCalls || 1);
+    
+    const sentimentScores = { 'positive': 1, 'neutral': 0, 'negative': -1 };
+    const avgSentiment = calls.reduce((sum, call) => 
+      sum + (sentimentScores[call.sentiment as keyof typeof sentimentScores] || 0), 0
+    ) / (totalCalls || 1);
+    
+    const resolutionRate = calls.filter(call => 
+      call.outcome === 'resolved' || call.outcome === 'Sale Closed' || call.outcome === 'Resolved'
+    ).length / (totalCalls || 1);
+    
+    // Get comparison data if requested
+    let comparisons;
+    if (params.compareFrom && params.compareTo) {
+      const compareCalls = Array.from(this.calls.values())
+        .filter(call => {
+          const callDate = new Date(call.startTime);
+          return userAgentIds.includes(call.agentId) &&
+                 callDate >= params.compareFrom! &&
+                 callDate <= params.compareTo!;
+        });
+      
+      comparisons = {
+        totalCalls: compareCalls.length,
+        avgDuration: compareCalls.reduce((sum, call) => sum + (call.duration || 0), 0) / (compareCalls.length || 1),
+        avgSentiment: compareCalls.reduce((sum, call) => 
+          sum + (sentimentScores[call.sentiment as keyof typeof sentimentScores] || 0), 0
+        ) / (compareCalls.length || 1),
+        resolutionRate: compareCalls.filter(call => 
+          call.outcome === 'resolved' || call.outcome === 'Sale Closed' || call.outcome === 'Resolved'
+        ).length / (compareCalls.length || 1)
+      };
+    }
+    
+    // Calculate trends (simplified for now)
+    const trends = [];
+    const groupBy = params.groupBy || 'day';
+    
+    // Group calls by time period
+    const grouped = new Map<string, Call[]>();
+    for (const call of calls) {
+      const date = new Date(call.startTime);
+      let key = '';
+      
+      switch (groupBy) {
+        case 'hour':
+          key = `${date.toISOString().slice(0, 13)}:00`;
+          break;
+        case 'day':
+          key = date.toISOString().slice(0, 10);
+          break;
+        case 'week':
+          const weekStart = new Date(date);
+          weekStart.setDate(date.getDate() - date.getDay());
+          key = weekStart.toISOString().slice(0, 10);
+          break;
+        case 'month':
+          key = date.toISOString().slice(0, 7);
+          break;
+      }
+      
+      if (!grouped.has(key)) {
+        grouped.set(key, []);
+      }
+      grouped.get(key)!.push(call);
+    }
+    
+    // Calculate metrics for each time period
+    for (const [timestamp, groupCalls] of grouped) {
+      const sentimentCounts = { positive: 0, negative: 0, neutral: 0 };
+      for (const call of groupCalls) {
+        const sentiment = call.sentiment || 'neutral';
+        sentimentCounts[sentiment as keyof typeof sentimentCounts]++;
+      }
+      
+      trends.push({
+        timestamp,
+        calls: groupCalls.length,
+        avgDuration: groupCalls.reduce((sum, call) => sum + (call.duration || 0), 0) / groupCalls.length,
+        sentiment: sentimentCounts
+      });
+    }
+    
+    // Agent performance
+    const agentPerformance = [];
+    for (const agentId of userAgentIds) {
+      const agent = this.agents.get(agentId);
+      if (!agent) continue;
+      
+      const agentCalls = calls.filter(call => call.agentId === agentId);
+      if (agentCalls.length === 0) continue;
+      
+      agentPerformance.push({
+        agentId,
+        agentName: agent.name,
+        totalCalls: agentCalls.length,
+        avgDuration: agentCalls.reduce((sum, call) => sum + (call.duration || 0), 0) / agentCalls.length,
+        avgSentiment: agentCalls.reduce((sum, call) => 
+          sum + (sentimentScores[call.sentiment as keyof typeof sentimentScores] || 0), 0
+        ) / agentCalls.length,
+        resolutionRate: agentCalls.filter(call => 
+          call.outcome === 'resolved' || call.outcome === 'Sale Closed' || call.outcome === 'Resolved'
+        ).length / agentCalls.length
+      });
+    }
+    
+    // Peak hours analysis
+    const hourlyStats = new Map<number, { calls: number; totalWait: number }>();
+    for (const call of calls) {
+      const hour = new Date(call.startTime).getHours();
+      if (!hourlyStats.has(hour)) {
+        hourlyStats.set(hour, { calls: 0, totalWait: 0 });
+      }
+      const stats = hourlyStats.get(hour)!;
+      stats.calls++;
+      // Simulate wait time based on metadata or use a default
+      stats.totalWait += (call.metadata?.waitTime as number) || 30;
+    }
+    
+    const peakHours = Array.from(hourlyStats.entries())
+      .map(([hour, stats]) => ({
+        hour,
+        calls: stats.calls,
+        avgWaitTime: stats.totalWait / stats.calls
+      }))
+      .sort((a, b) => b.calls - a.calls);
+    
+    return {
+      metrics: {
+        totalCalls,
+        avgDuration,
+        avgSentiment,
+        resolutionRate,
+        comparisons
+      },
+      trends,
+      agentPerformance,
+      peakHours
     };
   }
 }
