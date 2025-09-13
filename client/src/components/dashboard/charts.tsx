@@ -14,6 +14,10 @@ export default function Charts({ stats }: ChartsProps) {
     { label: "Audio Quality", value: "4.6/5", percentage: 92, color: "bg-blue-500" },
   ];
 
+  // Check which platforms are assigned to the user
+  const hasElevenLabs = stats.platforms?.includes('elevenlabs');
+  const hasLiveKit = stats.platforms?.includes('livekit');
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
       {/* Agent Utilization Chart */}
@@ -21,14 +25,18 @@ export default function Charts({ stats }: ChartsProps) {
         <CardHeader>
           <CardTitle className="text-lg">Agent Utilization Trends</CardTitle>
           <div className="flex items-center space-x-4 mt-2">
-            <div className="flex items-center space-x-2">
-              <div className="w-3 h-3 bg-primary rounded-full"></div>
-              <span className="text-sm text-muted-foreground">ElevenLabs Agents</span>
-            </div>
-            <div className="flex items-center space-x-2">
-              <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
-              <span className="text-sm text-muted-foreground">LiveKit Agents</span>
-            </div>
+            {hasElevenLabs && (
+              <div className="flex items-center space-x-2">
+                <div className="w-3 h-3 bg-primary rounded-full"></div>
+                <span className="text-sm text-muted-foreground">ElevenLabs Agents</span>
+              </div>
+            )}
+            {hasLiveKit && (
+              <div className="flex items-center space-x-2">
+                <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
+                <span className="text-sm text-muted-foreground">LiveKit Agents</span>
+              </div>
+            )}
           </div>
         </CardHeader>
         <CardContent>
@@ -46,24 +54,28 @@ export default function Charts({ stats }: ChartsProps) {
                   }} 
                 />
                 <Legend />
-                <Area
-                  type="monotone"
-                  dataKey="elevenlabs"
-                  stroke="hsl(217 91% 60%)"
-                  strokeWidth={2}
-                  fill="hsl(217 91% 60%)"
-                  fillOpacity={0.2}
-                  name="ElevenLabs"
-                />
-                <Area
-                  type="monotone"
-                  dataKey="livekit"
-                  stroke="#3b82f6"
-                  strokeWidth={2}
-                  fill="#3b82f6"
-                  fillOpacity={0.2}
-                  name="LiveKit"
-                />
+                {hasElevenLabs && (
+                  <Area
+                    type="monotone"
+                    dataKey="elevenlabs"
+                    stroke="hsl(217 91% 60%)"
+                    strokeWidth={2}
+                    fill="hsl(217 91% 60%)"
+                    fillOpacity={0.2}
+                    name="ElevenLabs"
+                  />
+                )}
+                {hasLiveKit && (
+                  <Area
+                    type="monotone"
+                    dataKey="livekit"
+                    stroke="#3b82f6"
+                    strokeWidth={2}
+                    fill="#3b82f6"
+                    fillOpacity={0.2}
+                    name="LiveKit"
+                  />
+                )}
               </AreaChart>
             </ResponsiveContainer>
           </div>
