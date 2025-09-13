@@ -13,10 +13,10 @@ const Card = React.forwardRef<HTMLDivElement, CardProps>(
       ref={ref}
       className={cn(
         premium
-          ? "card-premium rounded-xl"
+          ? "card-premium rounded-xl parallax-hover"
           : glass
-          ? "glass rounded-xl"
-          : "rounded-lg border bg-card text-card-foreground shadow-sm",
+          ? "glass rounded-xl tilt-card"
+          : "rounded-lg border bg-card text-card-foreground shadow-sm transition-all duration-300 hover:shadow-lg hover:scale-[1.01]",
         className
       )}
       {...props}

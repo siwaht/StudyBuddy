@@ -210,8 +210,8 @@ export default function Calls() {
   }
 
   return (
-    <div className="space-y-6 p-6" data-testid="calls-page">
-      <div className="flex items-center justify-between">
+    <div className="space-y-6 p-6 animate-fadeIn" data-testid="calls-page">
+      <div className="flex items-center justify-between animate-slideInLeft">
         <div>
           <h1 className="text-2xl font-bold">Call History</h1>
           <p className="text-muted-foreground">Search and filter voice agent calls</p>
@@ -219,7 +219,7 @@ export default function Calls() {
       </div>
 
       {/* Search and Filter Bar */}
-      <div className="flex gap-4">
+      <div className="flex gap-4 animate-slideInUp">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input

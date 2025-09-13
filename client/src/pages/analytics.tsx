@@ -216,8 +216,8 @@ export default function Analytics() {
   }
 
   return (
-    <div className="space-y-6 p-6" data-testid="analytics-page">
-      <div className="flex items-center justify-between">
+    <div className="space-y-6 p-6 animate-fadeIn" data-testid="analytics-page">
+      <div className="flex items-center justify-between animate-slideInLeft">
         <div>
           <h1 className="text-2xl font-bold">Advanced Analytics</h1>
           <p className="text-muted-foreground">Deep insights into agent performance and call patterns</p>

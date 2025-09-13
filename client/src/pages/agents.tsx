@@ -236,8 +236,8 @@ export default function Agents() {
   };
 
   return (
-    <div className="space-y-6 p-6" data-testid="agents-page">
-      <div className="flex items-center justify-between">
+    <div className="space-y-6 p-6 animate-fadeIn" data-testid="agents-page">
+      <div className="flex items-center justify-between animate-slideInLeft">
         <div>
           <h1 className="text-2xl font-bold">Agent Configuration</h1>
           <p className="text-muted-foreground">Manage your AI voice agents and their settings</p>

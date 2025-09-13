@@ -146,9 +146,9 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="p-6 space-y-6" data-testid="dashboard-page">
+    <div className="p-6 space-y-6 animate-fadeIn" data-testid="dashboard-page">
       {/* Quick Search Widget */}
-      <Card premium className="group transition-all duration-500 hover:scale-[1.01]">
+      <Card premium className="group transition-all duration-500 hover:scale-[1.01] animate-slideInUp parallax-hover">
         <CardHeader>
           <CardTitle gradient className="flex items-center justify-between">
             <span className="flex items-center gap-2">

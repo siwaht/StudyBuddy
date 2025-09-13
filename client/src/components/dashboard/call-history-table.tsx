@@ -75,9 +75,9 @@ export default function CallHistoryTable({ calls }: CallHistoryTableProps) {
                 <th className="text-left p-4 text-xs font-semibold text-purple-900/80 uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-purple-100/20">
+            <tbody className="divide-y divide-purple-100/20 stagger-animation">
               {calls.map((call, index) => (
-                <tr key={call.id} className="hover:bg-gradient-to-r hover:from-purple-50/30 hover:to-indigo-50/30 hover:scale-[1.001] transition-all duration-300 group odd:bg-white/30 even:bg-purple-50/10" data-testid={`call-row-${call.id}`}>
+                <tr key={call.id} className="hover:bg-gradient-to-r hover:from-purple-50/30 hover:to-indigo-50/30 hover:scale-[1.001] transition-all duration-300 group odd:bg-white/30 even:bg-purple-50/10 animate-fadeIn" style={{ animationDelay: `${index * 50}ms` }} data-testid={`call-row-${call.id}`}>
                   <td className="p-4 text-sm font-medium gradient-text">#{call.id}</td>
                   <td className="p-4 text-sm text-muted-foreground">
                     {formatTimestamp(call.startTime)}

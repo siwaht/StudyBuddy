@@ -17,6 +17,7 @@ import { LoginPage } from "@/pages/login";
 import Sidebar from "@/components/layout/sidebar";
 import Header from "@/components/layout/header";
 import { Loader2 } from "lucide-react";
+import { ScrollToTop } from "@/components/ui/scroll-to-top";
 
 // Protected route component
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -143,6 +144,7 @@ function App() {
         <TooltipProvider>
           <AppContent />
           <Toaster />
+          <ScrollToTop />
         </TooltipProvider>
       </AuthProvider>
     </QueryClientProvider>
