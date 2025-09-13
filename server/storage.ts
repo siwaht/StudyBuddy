@@ -837,13 +837,23 @@ export class DatabaseStorage implements IStorage {
     const p95Index = Math.floor(elevenLabsLatencies.length * 0.95);
     const elevenLabsLatencyP95 = elevenLabsLatencies[p95Index] || 0;
 
-    // Get active rooms
-    const activeRooms = await db.select().from(liveKitRooms)
-      .where(eq(liveKitRooms.isActive, true));
-
-    // Get agents for volume data
+    // Get agents for volume data (moved up to use for filtering)
     const allAgents = await db.select().from(agents)
       .where(inArray(agents.id, assignedAgentIds));
+    
+    // Get active rooms only for user's LiveKit agents
+    const userLiveKitAgents = allAgents.filter(a => a.platform === 'livekit');
+    const userLiveKitAgentIds = userLiveKitAgents.map(a => a.id);
+    
+    let activeRooms = [];
+    if (userLiveKitAgentIds.length > 0) {
+      // Only query rooms if user has LiveKit agents
+      activeRooms = await db.select().from(liveKitRooms)
+        .where(and(
+          eq(liveKitRooms.isActive, true),
+          inArray(liveKitRooms.agentId, userLiveKitAgentIds)
+        ));
+    }
     
     // Get unique platforms for assigned agents
     const platforms = Array.from(new Set(allAgents.map(a => a.platform)));
