@@ -1270,6 +1270,33 @@ export class DatabaseStorage implements IStorage {
         }
       }
 
+      // Transform ElevenLabs transcript format to our format
+      let formattedTranscript = [];
+      if (conversation.transcript && Array.isArray(conversation.transcript)) {
+        formattedTranscript = conversation.transcript.map((entry: any, index: number) => {
+          // Handle ElevenLabs format with role and message
+          if (entry.role && entry.message) {
+            return {
+              timestamp: entry.time_in_call_secs ? 
+                `${Math.floor(entry.time_in_call_secs / 60).toString().padStart(2, '0')}:${(entry.time_in_call_secs % 60).toString().padStart(2, '0')}` : 
+                `00:${(index * 5).toString().padStart(2, '0')}`, // Approximate timestamp if not provided
+              speaker: entry.role === 'agent' ? 'agent' : 'user',
+              text: entry.message
+            };
+          }
+          // If already in correct format, keep it
+          if (entry.timestamp && entry.speaker && entry.text) {
+            return entry;
+          }
+          // Fallback for any other format
+          return {
+            timestamp: `00:${(index * 5).toString().padStart(2, '0')}`,
+            speaker: 'user',
+            text: JSON.stringify(entry)
+          };
+        });
+      }
+
       // Prepare the call data - directly insert with custom ID
       const callData = {
         id: callId,
@@ -1279,8 +1306,8 @@ export class DatabaseStorage implements IStorage {
         duration,
         sentiment: conversation.analysis?.sentiment || 'neutral',
         outcome: conversation.metadata?.outcome || 'Completed',
-        recordingUrl: conversation.recording_url,
-        transcript: conversation.transcript || [],
+        recordingUrl: conversation.recording_url || conversation.audio_url || null,
+        transcript: formattedTranscript,
         analysis: conversation.analysis ? {
           summary: conversation.analysis.summary || '',
           topics: conversation.analysis.topics || [],
