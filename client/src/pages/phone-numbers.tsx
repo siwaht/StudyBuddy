@@ -370,7 +370,7 @@ export default function PhoneNumbers() {
                       <SelectValue placeholder="Select an agent" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">None</SelectItem>
+                      <SelectItem value="none">None</SelectItem>
                       {agents.filter(a => a.platform === 'elevenlabs').map(agent => (
                         <SelectItem key={agent.id} value={agent.id}>
                           {agent.name}
@@ -501,7 +501,7 @@ export default function PhoneNumbers() {
                       <SelectValue placeholder="Select an agent" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">None</SelectItem>
+                      <SelectItem value="none">None</SelectItem>
                       {agents.filter(a => a.platform === 'elevenlabs').map(agent => (
                         <SelectItem key={agent.id} value={agent.id}>
                           {agent.name}
@@ -542,12 +542,12 @@ export default function PhoneNumbers() {
             <div className="grid gap-2">
               <Label htmlFor="config-agent">Assigned Agent</Label>
               <Select
-                value={selectedNumber?.agentId || ""}
+                value={selectedNumber?.agentId || "none"}
                 onValueChange={(value) => {
                   if (selectedNumber) {
                     updatePhoneNumberMutation.mutate({
                       id: selectedNumber.id,
-                      agentId: value || null,
+                      agentId: value === "none" ? null : value,
                     });
                   }
                 }}
