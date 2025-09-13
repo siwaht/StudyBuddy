@@ -257,13 +257,14 @@ class ElevenLabsService {
       }
 
       // Check if audio is available (this field may be present in the conversation response)
-      if (conversation.has_audio === false) {
-        console.log(`No audio available for conversation ${conversationId} - has_audio is false`);
+      if (conversation.has_audio === false && conversation.has_response_audio === false) {
+        console.log(`No audio available for conversation ${conversationId} - has_audio and has_response_audio are false`);
         return null;
       }
 
-      // Try the correct ElevenLabs endpoint for audio retrieval with format parameter
-      const audioUrl = `https://api.elevenlabs.io/v1/convai/conversations/${conversationId}/audio?format=mp3`;
+      // Try the correct ElevenLabs endpoint for audio retrieval
+      // Note: The /audio endpoint doesn't need format parameter for MP3
+      const audioUrl = `https://api.elevenlabs.io/v1/convai/conversations/${conversationId}/audio`;
       
       console.log(`Fetching audio from: ${audioUrl}`);
       
@@ -313,22 +314,23 @@ class ElevenLabsService {
       }
 
       // Debug log to see what fields are available
+      // Debug log to see what fields are available
       console.log(`Conversation ${conversationId} audio fields:`, {
         has_recording_url: !!conversation.recording_url,
         has_audio: conversation.has_audio,
-        has_audio_url: !!conversation.audio_url,
-        has_audio_file: !!conversation.audio_file,
-        has_media: !!conversation.media,
-        available_fields: Object.keys(conversation).filter(k => k.toLowerCase().includes('audio') || k.toLowerCase().includes('recording') || k.toLowerCase().includes('media')),
-        all_fields: Object.keys(conversation)
+        has_user_audio: conversation.has_user_audio,
+        has_response_audio: conversation.has_response_audio,
+        available_audio_fields: Object.keys(conversation).filter(k => k.toLowerCase().includes('audio') || k.toLowerCase().includes('recording') || k.toLowerCase().includes('media'))
       });
 
       // Check multiple fields for audio availability
+      // ElevenLabs returns has_audio field to indicate if audio is available
       const hasAudio = !!(conversation.recording_url || 
                          conversation.audio_url || 
                          conversation.audio_file || 
                          conversation.media?.audio || 
-                         conversation.has_audio === true);
+                         conversation.has_audio === true ||
+                         conversation.has_response_audio === true);
       
       console.log(`Conversation ${conversationId} hasAudio result: ${hasAudio}`);
       return hasAudio;
@@ -487,8 +489,9 @@ class ElevenLabsService {
   }
 
   // Get usage analytics
-  async getUsageAnalytics(startDate?: Date, endDate?: Date): Promise<any> {
-    if (!this.apiKey) {
+  async getUsageAnalytics(startDate?: Date, endDate?: Date, accountId?: string): Promise<any> {
+    const apiKey = await this.getApiKey(accountId);
+    if (!apiKey) {
       return null;
     }
 
