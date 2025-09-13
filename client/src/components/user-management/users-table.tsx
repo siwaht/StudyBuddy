@@ -3,9 +3,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Search } from "lucide-react";
+import { Search, Bot, Settings } from "lucide-react";
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import type { UserWithoutPassword } from "@/lib/types";
+import type { Agent } from "@shared/schema";
+import AgentAssignmentDialog from "./agent-assignment-dialog";
 
 interface UsersTableProps {
   users: UserWithoutPassword[];
@@ -56,6 +59,18 @@ const getInitials = (username: string) => {
 export default function UsersTable({ users }: UsersTableProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
+  const [selectedUser, setSelectedUser] = useState<UserWithoutPassword | null>(null);
+  const [isAssignmentDialogOpen, setIsAssignmentDialogOpen] = useState(false);
+
+  // Fetch user agents for all users to show counts
+  const { data: userAgentsMap, isLoading: isLoadingAgents } = useQuery<Record<string, { count: number; agents: Array<{ id: string; name: string }> }>>({
+    queryKey: ["/api/user-agents-map"],
+  });
+
+  const handleAssignAgents = (user: UserWithoutPassword) => {
+    setSelectedUser(user);
+    setIsAssignmentDialogOpen(true);
+  };
 
   const filteredUsers = users.filter(user => {
     const matchesSearch = user.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -104,6 +119,7 @@ export default function UsersTable({ users }: UsersTableProps) {
                 <th className="text-left p-4 text-sm font-medium text-muted-foreground">User</th>
                 <th className="text-left p-4 text-sm font-medium text-muted-foreground">Email</th>
                 <th className="text-left p-4 text-sm font-medium text-muted-foreground">Role</th>
+                <th className="text-left p-4 text-sm font-medium text-muted-foreground">Assigned Agents</th>
                 <th className="text-left p-4 text-sm font-medium text-muted-foreground">Last Active</th>
                 <th className="text-left p-4 text-sm font-medium text-muted-foreground">Status</th>
                 <th className="text-left p-4 text-sm font-medium text-muted-foreground">Actions</th>
@@ -132,6 +148,34 @@ export default function UsersTable({ users }: UsersTableProps) {
                     >
                       {user.role.charAt(0).toUpperCase() + user.role.slice(1)}
                     </Badge>
+                  </td>
+                  <td className="p-4">
+                    {user.role === 'admin' ? (
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className="text-xs">
+                          <Bot className="h-3 w-3 mr-1" />
+                          All Agents
+                        </Badge>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        {!isLoadingAgents && userAgentsMap?.[user.id] && (
+                          <Badge variant="secondary" className="text-xs">
+                            {userAgentsMap[user.id].count} agent{userAgentsMap[user.id].count !== 1 ? 's' : ''}
+                          </Badge>
+                        )}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-xs"
+                          onClick={() => handleAssignAgents(user)}
+                          data-testid={`button-assign-agents-${user.id}`}
+                        >
+                          <Settings className="h-3 w-3 mr-1" />
+                          Manage Agents
+                        </Button>
+                      </div>
+                    )}
                   </td>
                   <td className="p-4 text-sm text-muted-foreground">
                     {formatLastActive(user.lastActive)}
@@ -179,6 +223,12 @@ export default function UsersTable({ users }: UsersTableProps) {
           )}
         </div>
       </CardContent>
+
+      <AgentAssignmentDialog
+        open={isAssignmentDialogOpen}
+        onOpenChange={setIsAssignmentDialogOpen}
+        user={selectedUser}
+      />
     </Card>
   );
 }

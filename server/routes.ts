@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertUserSchema, insertAgentSchema, insertCallSchema } from "@shared/schema";
 import { hashPassword, validatePassword, requireAuth, requireAdmin } from "./auth";
+import { z } from "zod";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Authentication routes
@@ -193,6 +194,102 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(userWithoutPassword);
     } catch (error) {
       res.status(500).json({ message: "Failed to update user" });
+    }
+  });
+
+  // Get all user-agent assignments map - Admin only (efficient for Users table)
+  app.get("/api/user-agents-map", requireAuth, requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const userAgentAssignments = await storage.getAllUserAgentAssignments();
+      
+      // Convert Map to a plain object for JSON serialization
+      const result: Record<string, { count: number; agents: Array<{ id: string; name: string }> }> = {};
+      
+      userAgentAssignments.forEach((value, userId) => {
+        result[userId] = {
+          count: value.count,
+          agents: value.agents.map(agent => ({ id: agent.id, name: agent.name }))
+        };
+      });
+      
+      res.json(result);
+    } catch (error) {
+      console.error('Error fetching user-agent assignments map:', error);
+      res.status(500).json({ message: "Failed to fetch user-agent assignments" });
+    }
+  });
+
+  // User-Agent assignment routes - Admin only
+  app.get("/api/users/:userId/agents", requireAuth, requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { userId } = req.params;
+      
+      // Verify user exists
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      // Get assigned agents for the user
+      const agents = await storage.getUserAgents(userId);
+      res.json(agents);
+    } catch (error) {
+      console.error('Error fetching user agents:', error);
+      res.status(500).json({ message: "Failed to fetch user agents" });
+    }
+  });
+
+  app.put("/api/users/:userId/agents", requireAuth, requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { userId } = req.params;
+      
+      // Validate input with Zod schema
+      const agentAssignmentSchema = z.object({
+        agentIds: z.array(z.string().uuid("Each agent ID must be a valid UUID"))
+      });
+      
+      const validationResult = agentAssignmentSchema.safeParse(req.body);
+      
+      if (!validationResult.success) {
+        return res.status(400).json({ 
+          message: "Invalid request data",
+          errors: validationResult.error.flatten()
+        });
+      }
+      
+      const { agentIds } = validationResult.data;
+      
+      // Verify user exists
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      // Admins don't need assignments - they see everything
+      if (user.role === 'admin') {
+        return res.status(400).json({ message: "Cannot modify assignments for admin users" });
+      }
+      
+      // Update the assignments
+      await storage.assignAgents(userId, agentIds);
+      
+      // Return the updated list of assigned agents
+      const updatedAgents = await storage.getUserAgents(userId);
+      res.json(updatedAgents);
+    } catch (error) {
+      console.error('Error updating user agents:', error);
+      res.status(500).json({ message: "Failed to update user agents" });
+    }
+  });
+
+  // Get all agents (without user filtering) - Admin only
+  app.get("/api/all-agents", requireAuth, requireAdmin, async (req: Request, res: Response) => {
+    try {
+      // For admins to see all agents when assigning
+      const agents = await storage.getAllAgents(req.user!.id);
+      res.json(agents);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch all agents" });
     }
   });
 

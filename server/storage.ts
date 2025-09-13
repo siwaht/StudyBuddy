@@ -27,6 +27,7 @@ export interface IStorage {
   assignAgents(userId: string, agentIds: string[]): Promise<void>;
   removeAgentAssignment(userId: string, agentId: string): Promise<void>;
   getUserAgents(userId: string): Promise<Agent[]>;
+  getAllUserAgentAssignments(): Promise<Map<string, { count: number; agents: Agent[] }>>;
 
   // Agents - REQUIRES USER ID FOR DATA ISOLATION
   getAgent(userId: string, agentId: string): Promise<Agent | undefined>;
@@ -469,6 +470,39 @@ export class MemStorage implements IStorage {
     const agentIds = await this.getAssignedAgentIds(userId);
     return Array.from(this.agents.values())
       .filter(agent => agentIds.includes(agent.id));
+  }
+
+  async getAllUserAgentAssignments(): Promise<Map<string, { count: number; agents: Agent[] }>> {
+    const userAgentMap = new Map<string, { count: number; agents: Agent[] }>();
+    
+    // Get all users
+    const users = Array.from(this.users.values());
+    const allAgents = Array.from(this.agents.values());
+    
+    for (const user of users) {
+      // Admins have access to all agents
+      if (user.role === 'admin') {
+        userAgentMap.set(user.id, {
+          count: allAgents.length,
+          agents: allAgents
+        });
+      } else {
+        // Regular users have specific assignments
+        const assignedAgentIds = Array.from(this.userAgents.values())
+          .filter(ua => ua.userId === user.id)
+          .map(ua => ua.agentId);
+        
+        const assignedAgents = allAgents
+          .filter(agent => assignedAgentIds.includes(agent.id));
+        
+        userAgentMap.set(user.id, {
+          count: assignedAgents.length,
+          agents: assignedAgents
+        });
+      }
+    }
+    
+    return userAgentMap;
   }
 
   // Agent methods - WITH DATA ISOLATION
