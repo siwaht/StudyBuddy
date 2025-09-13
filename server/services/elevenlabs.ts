@@ -295,11 +295,20 @@ class ElevenLabsService {
     try {
       const conversation = await this.getConversation(conversationId, accountId);
       if (!conversation) {
+        console.log(`Conversation ${conversationId} not found`);
         return false;
       }
 
+      // Debug log to see what fields are available
+      console.log(`Conversation ${conversationId} audio fields:`, {
+        has_recording_url: !!conversation.recording_url,
+        has_audio: conversation.has_audio,
+        has_audio_url: !!conversation.audio_url,
+        available_fields: Object.keys(conversation).filter(k => k.includes('audio') || k.includes('recording'))
+      });
+
       // Check if there's a recording_url or has_audio is not false
-      return !!(conversation.recording_url || conversation.has_audio !== false);
+      return !!(conversation.recording_url || conversation.audio_url || conversation.has_audio !== false);
     } catch (error) {
       console.error(`Error checking audio availability for conversation ${conversationId}:`, error);
       return false;
