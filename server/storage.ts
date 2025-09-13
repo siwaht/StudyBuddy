@@ -1223,14 +1223,52 @@ export class DatabaseStorage implements IStorage {
         return undefined;
       }
 
-      // Calculate duration in seconds
-      const duration = conversation.end_time && conversation.start_time
-        ? Math.floor((conversation.end_time - conversation.start_time) / 1000)
-        : 0;
+      // Validate and convert timestamps
+      let startTime: Date;
+      let endTime: Date | undefined;
+      let duration = 0;
 
-      // Convert Unix timestamp to Date objects
-      const startTime = new Date(conversation.start_time);
-      const endTime = conversation.end_time ? new Date(conversation.end_time) : undefined;
+      // Check if start_time is valid
+      if (conversation.start_time) {
+        const startTimestamp = Number(conversation.start_time);
+        if (!isNaN(startTimestamp) && startTimestamp > 0) {
+          // ElevenLabs timestamps are in milliseconds
+          startTime = new Date(startTimestamp);
+          // Validate the date
+          if (isNaN(startTime.getTime())) {
+            console.warn(`Invalid start_time for conversation ${conversation.conversation_id}:`, conversation.start_time);
+            startTime = new Date(); // Use current time as fallback
+          }
+        } else {
+          console.warn(`Invalid start_time for conversation ${conversation.conversation_id}:`, conversation.start_time);
+          startTime = new Date(); // Use current time as fallback
+        }
+      } else {
+        startTime = new Date(); // Use current time if missing
+      }
+
+      // Check if end_time is valid
+      if (conversation.end_time) {
+        const endTimestamp = Number(conversation.end_time);
+        if (!isNaN(endTimestamp) && endTimestamp > 0) {
+          endTime = new Date(endTimestamp);
+          // Validate the date
+          if (isNaN(endTime.getTime())) {
+            console.warn(`Invalid end_time for conversation ${conversation.conversation_id}:`, conversation.end_time);
+            endTime = undefined;
+          } else {
+            // Calculate duration in seconds
+            duration = Math.floor((endTime.getTime() - startTime.getTime()) / 1000);
+            if (duration < 0) {
+              console.warn(`Negative duration for conversation ${conversation.conversation_id}:`, duration);
+              duration = 0;
+            }
+          }
+        } else {
+          console.warn(`Invalid end_time for conversation ${conversation.conversation_id}:`, conversation.end_time);
+          endTime = undefined;
+        }
+      }
 
       // Prepare the call data - directly insert with custom ID
       const callData = {
