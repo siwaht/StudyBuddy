@@ -172,6 +172,31 @@ export default function Agents() {
     },
   });
 
+  const importHistoryMutation = useMutation({
+    mutationFn: async ({ agentId, accountId }: { agentId: string; accountId?: string }) => {
+      const response = await apiRequest("POST", `/api/agents/${agentId}/import-conversations`, {
+        accountId,
+        limit: 100,
+      });
+      return response.json();
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Import Complete",
+        description: `Imported ${data.stats.imported} conversations, ${data.stats.skipped} already existed`,
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/calls"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to import conversation history",
+        variant: "destructive",
+      });
+    },
+  });
+
   const deleteAgentMutation = useMutation({
     mutationFn: async (agentId: string) => {
       const response = await apiRequest("DELETE", `/api/agents/${agentId}`);
@@ -247,6 +272,13 @@ export default function Agents() {
     importAllAgentsMutation.mutate({ 
       platform: importForm.platform,
       accountId: importForm.accountId 
+    });
+  };
+
+  const handleImportHistory = (agent: Agent) => {
+    importHistoryMutation.mutate({
+      agentId: agent.id,
+      accountId: agent.accountId || undefined,
     });
   };
 
@@ -354,6 +386,19 @@ export default function Agents() {
                       <Settings2 className="h-4 w-4 mr-2" />
                       Configure
                     </Button>
+                    {agent.platform === 'elevenlabs' && (
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        className="flex-1" 
+                        data-testid={`import-history-${agent.id}`}
+                        onClick={() => handleImportHistory(agent)}
+                        disabled={importHistoryMutation.isPending}
+                      >
+                        <Download className="h-4 w-4 mr-2" />
+                        {importHistoryMutation.isPending ? "Importing..." : "Import History"}
+                      </Button>
+                    )}
                   </div>
                 </div>
               </CardContent>

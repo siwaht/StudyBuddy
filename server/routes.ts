@@ -927,7 +927,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { accountId, startTime, endTime, limit } = req.body;
       
       // Verify the agent exists and belongs to the right platform
-      const agent = await storage.getAgent(agentId);
+      const agent = await storage.getAgent(req.user!.id, agentId);
       if (!agent) {
         return res.status(404).json({ message: "Agent not found" });
       }
