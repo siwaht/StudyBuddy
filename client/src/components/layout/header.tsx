@@ -1,21 +1,7 @@
 import { useLocation } from "wouter";
-import { Calendar, LogOut, User, ChevronDown } from "lucide-react";
+import { Calendar, LogOut } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 
 const getPageInfo = (pathname: string) => {
   switch (pathname) {
@@ -53,13 +39,6 @@ export default function Header() {
     await logout();
   };
 
-  // Get user initials for avatar
-  const getUserInitials = () => {
-    if (!user) return "?";
-    const names = user.username.split(".");
-    return names.map(n => n[0].toUpperCase()).join("");
-  };
-
   return (
     <header className="bg-card border-b border-border px-4 md:px-6 py-3 md:py-4">
       <div className="flex justify-between items-center">
@@ -76,63 +55,16 @@ export default function Header() {
             <Calendar className="h-4 w-4" />
             <span>Date Range: Last 7 Days</span>
           </div>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      className="relative flex items-center gap-1 h-12 px-2 rounded-full hover:opacity-90 transition-all hover:bg-purple-50 dark:hover:bg-purple-950/30"
-                      data-testid="button-user-menu"
-                    >
-                      <div className="h-10 w-10 bg-gradient-to-br from-purple-500 via-purple-600 to-indigo-600 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-lg ring-2 ring-purple-500/20">
-                        {getUserInitials()}
-                      </div>
-                      <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom">
-                    <p>Account menu</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent className="w-64 bg-card/95 backdrop-blur-md border-purple-500/20" align="end" forceMount>
-              <DropdownMenuLabel className="font-normal pb-3">
-                <div className="flex items-center space-x-3">
-                  <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-full flex items-center justify-center text-white font-semibold text-sm">
-                    {getUserInitials()}
-                  </div>
-                  <div className="flex flex-col space-y-1">
-                    <p className="text-sm font-semibold leading-none">
-                      {user?.username}
-                    </p>
-                    <p className="text-xs leading-none text-muted-foreground">
-                      {user?.email}
-                    </p>
-                    <p className="text-xs leading-none text-purple-600 dark:text-purple-400 font-medium capitalize">
-                      {user?.role} Account
-                    </p>
-                  </div>
-                </div>
-              </DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem className="cursor-pointer hover:bg-purple-50 dark:hover:bg-purple-950/30">
-                <User className="mr-2 h-4 w-4" />
-                <span>Profile Settings</span>
-              </DropdownMenuItem>
-              <DropdownMenuSeparator className="bg-purple-100 dark:bg-purple-900/30" />
-              <DropdownMenuItem
-                className="cursor-pointer bg-red-50 dark:bg-red-950/30 text-destructive hover:bg-red-100 dark:hover:bg-red-950/50 focus:bg-red-100 dark:focus:bg-red-950/50 font-medium"
-                onClick={handleLogout}
-                data-testid="button-logout"
-              >
-                <LogOut className="mr-2 h-4 w-4" />
-                <span className="font-semibold">Sign Out</span>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={handleLogout}
+            aria-label="Log out"
+            data-testid="button-logout"
+            className="h-10 w-10"
+          >
+            <LogOut className="h-5 w-5" />
+          </Button>
         </div>
       </div>
     </header>
