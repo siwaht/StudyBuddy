@@ -73,13 +73,33 @@ export default function PhoneNumbers() {
   // Add phone number mutation
   const addPhoneNumberMutation = useMutation({
     mutationFn: async (data: any) => {
+      // If it's a Twilio number, also register with ElevenLabs
+      if (data.provider === 'twilio' && data.configuration?.accountSid) {
+        try {
+          // Register with ElevenLabs if agent is selected
+          if (data.agentId) {
+            const agent = agents.find(a => a.id === data.agentId);
+            if (agent?.metadata?.externalId || agent?.accountId) {
+              await apiRequest("POST", "/api/elevenlabs/register-phone", {
+                agentId: agent.metadata?.externalId || agent.accountId,
+                phoneNumber: data.number,
+                twilioAccountSid: data.configuration.accountSid,
+                twilioAuthToken: data.configuration.authToken,
+              });
+            }
+          }
+        } catch (error) {
+          console.error('Failed to register with ElevenLabs:', error);
+        }
+      }
+      
       const response = await apiRequest("POST", "/api/phone-numbers", data);
       return response.json();
     },
     onSuccess: () => {
       toast({
         title: "Success",
-        description: "Phone number added successfully",
+        description: "Phone number added and configured successfully",
       });
       setIsAddNumberOpen(false);
       resetForms();
@@ -324,7 +344,9 @@ export default function PhoneNumbers() {
               <Alert>
                 <AlertCircle className="h-4 w-4" />
                 <AlertDescription>
-                  Import your Twilio phone number. ElevenLabs will automatically configure the voice webhooks.
+                  Import your Twilio phone number. When assigned to an agent, ElevenLabs will automatically configure the voice webhooks.
+                  <br />
+                  <strong>Note:</strong> Call transfers only work between Twilio numbers with native integration.
                 </AlertDescription>
               </Alert>
 
@@ -386,7 +408,9 @@ export default function PhoneNumbers() {
               <Alert>
                 <AlertCircle className="h-4 w-4" />
                 <AlertDescription>
-                  Connect your existing phone infrastructure via SIP trunking.
+                  Connect your existing phone infrastructure via SIP trunking. Supports transfers to any phone number.
+                  <br />
+                  <strong>Supported Codecs:</strong> G711 8kHz, G722 16kHz | <strong>Transport:</strong> TCP/TLS
                 </AlertDescription>
               </Alert>
 

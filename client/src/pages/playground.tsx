@@ -110,47 +110,53 @@ export default function Playground() {
       // Create audio context
       audioContextRef.current = new AudioContext();
       
-      // For demo purposes, simulate connection without actual WebSocket
-      // Real implementation would require ElevenLabs API key configuration
-      setIsConnected(true);
-      setSessionStatus("connected");
-      sessionStartTimeRef.current = Date.now();
+      // Check if we need to get a signed URL for private agents
+      let connectionUrl = signedUrlOrAgentId;
       
-      // Start duration timer
-      durationIntervalRef.current = setInterval(() => {
-        if (sessionStartTimeRef.current) {
-          setDuration(Math.floor((Date.now() - sessionStartTimeRef.current) / 1000));
+      // If it's not already a WebSocket URL, build one
+      if (!connectionUrl.startsWith('wss://')) {
+        // Check if ElevenLabs API is configured
+        const apiKeyResponse = await fetch('/api/elevenlabs/agents');
+        if (!apiKeyResponse.ok) {
+          // API not configured, use demo mode
+          setIsConnected(true);
+          setSessionStatus("connected");
+          sessionStartTimeRef.current = Date.now();
+          
+          // Start duration timer
+          durationIntervalRef.current = setInterval(() => {
+            if (sessionStartTimeRef.current) {
+              setDuration(Math.floor((Date.now() - sessionStartTimeRef.current) / 1000));
+            }
+          }, 1000);
+          
+          toast({
+            title: "Demo Mode",
+            description: "ElevenLabs API key not configured. Add ELEVENLABS_API_KEY to enable real conversations.",
+          });
+          
+          // Add demo message
+          setTimeout(() => {
+            const entry: TranscriptEntry = {
+              speaker: 'agent',
+              text: 'Demo mode active. Configure ElevenLabs API key to enable real conversations.',
+              timestamp: new Date().toLocaleTimeString(),
+            };
+            setTranscript([entry]);
+            setLatency(150);
+          }, 500);
+          
+          return;
         }
-      }, 1000);
+        
+        // Build WebSocket URL for public agent
+        connectionUrl = `wss://api.elevenlabs.io/v1/convai/conversation?agent_id=${signedUrlOrAgentId}`;
+      }
       
-      toast({
-        title: "Test Mode Active",
-        description: "Connected in demo mode. Configure ElevenLabs API for real conversations.",
-      });
-      
-      // Add initial message to transcript
-      setTimeout(() => {
-        const entry: TranscriptEntry = {
-          speaker: 'agent',
-          text: 'Hello! This is a test session. Real-time conversations require ElevenLabs API configuration.',
-          timestamp: new Date().toLocaleTimeString(),
-        };
-        setTranscript([entry]);
-        setLatency(Math.floor(Math.random() * 200) + 100); // Simulate latency
-      }, 500);
-      
-      return; // Exit early for demo mode
-      
-      /* Uncomment when API keys are configured:
-      const wsUrl = signedUrlOrAgentId.startsWith('wss://') 
-        ? signedUrlOrAgentId 
-        : `wss://api.elevenlabs.io/v1/convai/conversation?agent_id=${signedUrlOrAgentId}`;
-      
-      const ws = new WebSocket(wsUrl);
+      // Connect via WebSocket
+      const ws = new WebSocket(connectionUrl);
       wsRef.current = ws;
-      */
       
-      /* WebSocket handlers for when API is configured:
       ws.onopen = () => {
         setIsConnected(true);
         setSessionStatus("connected");
@@ -165,8 +171,13 @@ export default function Playground() {
         
         toast({
           title: "Connected",
-          description: "Connected to agent successfully",
+          description: "Connected to ElevenLabs agent",
         });
+        
+        // Send initial audio setup
+        if (mediaStreamRef.current) {
+          // Set up audio streaming here
+        }
       };
       
       ws.onmessage = (event) => {
@@ -174,16 +185,16 @@ export default function Playground() {
           const data = JSON.parse(event.data);
           handleWebSocketMessage(data);
         } catch (error) {
-          console.error("Error parsing WebSocket message:", error);
+          console.error('Error parsing message:', error);
         }
       };
       
       ws.onerror = (error) => {
-        console.error("WebSocket error:", error);
+        console.error('WebSocket error:', error);
         setSessionStatus("error");
         toast({
           title: "Connection Error",
-          description: "Failed to connect to agent. Make sure ElevenLabs API is configured.",
+          description: "Failed to connect to agent",
           variant: "destructive",
         });
       };
@@ -195,7 +206,7 @@ export default function Playground() {
           clearInterval(durationIntervalRef.current);
         }
       };
-      */
+      
       
     } catch (error: any) {
       console.error("Error connecting to agent:", error);

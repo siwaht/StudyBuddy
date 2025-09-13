@@ -6,6 +6,7 @@ import { hashPassword, validatePassword, requireAuth, requireAdmin } from "./aut
 import { z } from "zod";
 import * as livekit from "./livekit";
 import { elevenLabsIntegration } from "./integrations/elevenlabs";
+import { elevenlabsService } from "./services/elevenlabs";
 import { encrypt, decrypt } from "./utils/crypto";
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -1268,6 +1269,168 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error('Error deleting phone number:', error);
       res.status(500).json({ 
         message: "Failed to delete phone number",
+        error: error.message 
+      });
+    }
+  });
+
+  // ElevenLabs API Routes
+  app.get("/api/elevenlabs/signed-url/:agentId", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { agentId } = req.params;
+      
+      if (!elevenlabsService.isConfigured()) {
+        return res.status(400).json({ 
+          message: "ElevenLabs API key not configured. Please set ELEVENLABS_API_KEY environment variable." 
+        });
+      }
+      
+      const signedUrl = await elevenlabsService.getSignedUrl(agentId);
+      
+      if (!signedUrl) {
+        return res.status(500).json({ message: "Failed to generate signed URL" });
+      }
+      
+      res.json({ signedUrl });
+    } catch (error: any) {
+      console.error('Error generating signed URL:', error);
+      res.status(500).json({ 
+        message: "Failed to generate signed URL",
+        error: error.message 
+      });
+    }
+  });
+  
+  app.get("/api/elevenlabs/agents", requireAuth, async (req: Request, res: Response) => {
+    try {
+      if (!elevenlabsService.isConfigured()) {
+        return res.json([]); // Return empty array if not configured
+      }
+      
+      const agents = await elevenlabsService.listAgents();
+      res.json(agents);
+    } catch (error: any) {
+      console.error('Error fetching ElevenLabs agents:', error);
+      res.status(500).json({ 
+        message: "Failed to fetch agents",
+        error: error.message 
+      });
+    }
+  });
+  
+  app.get("/api/elevenlabs/conversations", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { agentId, limit } = req.query;
+      
+      if (!elevenlabsService.isConfigured()) {
+        return res.json([]);
+      }
+      
+      const conversations = await elevenlabsService.listConversations(
+        agentId as string,
+        limit ? parseInt(limit as string) : 100
+      );
+      
+      res.json(conversations);
+    } catch (error: any) {
+      console.error('Error fetching conversations:', error);
+      res.status(500).json({ 
+        message: "Failed to fetch conversations",
+        error: error.message 
+      });
+    }
+  });
+  
+  app.post("/api/elevenlabs/outbound-call", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { agentId, toNumber, fromNumber, phoneNumberId, provider } = req.body;
+      
+      if (!elevenlabsService.isConfigured()) {
+        return res.status(400).json({ 
+          message: "ElevenLabs API key not configured" 
+        });
+      }
+      
+      let result;
+      
+      if (provider === 'sip' && phoneNumberId) {
+        // Use SIP trunk for the call
+        result = await elevenlabsService.initiateOutboundCallSIP({
+          agentId,
+          agentPhoneNumberId: phoneNumberId,
+          toNumber,
+        });
+      } else {
+        // Use Twilio for the call
+        result = await elevenlabsService.initiateOutboundCallTwilio({
+          agentId,
+          toNumber,
+          fromNumber,
+        });
+      }
+      
+      res.json({
+        message: "Call initiated successfully",
+        ...result,
+      });
+    } catch (error: any) {
+      console.error('Error initiating outbound call:', error);
+      res.status(500).json({ 
+        message: "Failed to initiate call",
+        error: error.message 
+      });
+    }
+  });
+  
+  app.post("/api/elevenlabs/register-phone", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { agentId, phoneNumber, twilioAccountSid, twilioAuthToken } = req.body;
+      
+      if (!elevenlabsService.isConfigured()) {
+        return res.status(400).json({ 
+          message: "ElevenLabs API key not configured" 
+        });
+      }
+      
+      const result = await elevenlabsService.registerPhoneNumber({
+        agentId,
+        phoneNumberId: phoneNumber,
+        twilioAccountSid,
+        twilioAuthToken,
+      });
+      
+      res.json({
+        message: "Phone number registered with ElevenLabs",
+        ...result,
+      });
+    } catch (error: any) {
+      console.error('Error registering phone number:', error);
+      res.status(500).json({ 
+        message: "Failed to register phone number",
+        error: error.message 
+      });
+    }
+  });
+  
+  app.get("/api/elevenlabs/usage", requireAuth, async (req: Request, res: Response) => {
+    try {
+      if (!elevenlabsService.isConfigured()) {
+        return res.json({ 
+          usage: 0,
+          limit: 0,
+          remaining: 0 
+        });
+      }
+      
+      const startDate = req.query.startDate ? new Date(req.query.startDate as string) : undefined;
+      const endDate = req.query.endDate ? new Date(req.query.endDate as string) : undefined;
+      
+      const usage = await elevenlabsService.getUsageAnalytics(startDate, endDate);
+      res.json(usage || { usage: 0, limit: 0, remaining: 0 });
+    } catch (error: any) {
+      console.error('Error fetching usage:', error);
+      res.status(500).json({ 
+        message: "Failed to fetch usage",
         error: error.message 
       });
     }
