@@ -78,10 +78,12 @@ export default function PhoneNumbers() {
         try {
           // Register with ElevenLabs if agent is selected
           if (data.agentId) {
-            const agent = agents.find(a => a.id === data.agentId);
-            if (agent?.metadata?.externalId || agent?.accountId) {
+            const agent = agents.find((a: any) => a.id === data.agentId);
+            // Use externalId which stores the ElevenLabs agent ID
+            const elevenLabsAgentId = agent?.externalId;
+            if (elevenLabsAgentId) {
               await apiRequest("POST", "/api/elevenlabs/register-phone", {
-                agentId: agent.metadata?.externalId || agent.accountId,
+                agentId: elevenLabsAgentId,
                 phoneNumber: data.number,
                 twilioAccountSid: data.configuration.accountSid,
                 twilioAuthToken: data.configuration.authToken,
