@@ -4,7 +4,8 @@ import {
   type Call, type InsertCall,
   type PerformanceMetric, type InsertPerformanceMetric,
   type LiveKitRoom, type InsertLiveKitRoom,
-  type UserAgent, type InsertUserAgent
+  type UserAgent, type InsertUserAgent,
+  type ApiKey, type InsertApiKey
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 import bcrypt from "bcryptjs";
@@ -130,6 +131,18 @@ export interface IStorage {
       avgWaitTime: number;
     }>;
   }>;
+
+  // API Keys Management
+  getApiKey(service: string): Promise<ApiKey | undefined>;
+  getAllApiKeys(): Promise<ApiKey[]>;
+  createApiKey(apiKey: InsertApiKey): Promise<ApiKey>;
+  updateApiKey(service: string, encryptedKey: string): Promise<ApiKey | undefined>;
+  deleteApiKey(service: string): Promise<boolean>;
+
+  // Permissions Management
+  getUserPermissions(userId: string): Promise<Record<string, boolean>>;
+  updateUserPermissions(userId: string, permissions: Record<string, boolean>): Promise<boolean>;
+  checkUserPermission(userId: string, permission: string): Promise<boolean>;
 }
 
 export class MemStorage implements IStorage {
@@ -139,6 +152,7 @@ export class MemStorage implements IStorage {
   private performanceMetrics: Map<string, PerformanceMetric> = new Map();
   private liveKitRooms: Map<string, LiveKitRoom> = new Map();
   private userAgents: Map<string, UserAgent> = new Map();
+  private apiKeys: Map<string, ApiKey> = new Map();
 
   constructor() {
     this.seedDataAsync();
@@ -161,6 +175,7 @@ export class MemStorage implements IStorage {
         password: hashedPassword,
         role: "admin" as const,
         isActive: true,
+        permissions: {},
         lastActive: new Date(Date.now() - 2 * 60 * 60 * 1000), // 2 hours ago
         createdAt: new Date(),
       },
@@ -171,6 +186,7 @@ export class MemStorage implements IStorage {
         password: hashedPassword,
         role: "admin" as const,
         isActive: true,
+        permissions: {},
         lastActive: new Date(Date.now() - 1 * 60 * 60 * 1000), // 1 hour ago
         createdAt: new Date(),
       },
@@ -181,6 +197,7 @@ export class MemStorage implements IStorage {
         password: hashedPassword,
         role: "user" as const,
         isActive: true,
+        permissions: {},
         lastActive: new Date(Date.now() - 24 * 60 * 60 * 1000), // 1 day ago
         createdAt: new Date(),
       },
@@ -191,6 +208,7 @@ export class MemStorage implements IStorage {
         password: hashedPassword,
         role: "user" as const,
         isActive: true,
+        permissions: {},
         lastActive: new Date(Date.now() - 30 * 60 * 1000), // 30 minutes ago
         createdAt: new Date(),
       },
@@ -201,6 +219,7 @@ export class MemStorage implements IStorage {
         password: hashedPassword,
         role: "user" as const,
         isActive: true,
+        permissions: {},
         lastActive: new Date(Date.now() - 4 * 60 * 60 * 1000), // 4 hours ago
         createdAt: new Date(),
       },
@@ -215,6 +234,8 @@ export class MemStorage implements IStorage {
         name: "SalesBot",
         platform: "elevenlabs" as const,
         description: "High quality voice agent for sales inquiries",
+        externalId: null,
+        metadata: null,
         isActive: true,
         createdAt: new Date(),
       },
@@ -223,6 +244,8 @@ export class MemStorage implements IStorage {
         name: "SupportRouter",
         platform: "livekit" as const,
         description: "Advanced technical support worker with GPT-4o integration",
+        externalId: null,
+        metadata: null,
         isActive: true,
         createdAt: new Date(),
       },
@@ -231,6 +254,8 @@ export class MemStorage implements IStorage {
         name: "IVR Assistant",
         platform: "elevenlabs" as const,
         description: "Initial call routing and FAQ handling",
+        externalId: null,
+        metadata: null,
         isActive: false,
         createdAt: new Date(),
       },
@@ -239,6 +264,8 @@ export class MemStorage implements IStorage {
         name: "Customer Service Bot",
         platform: "livekit" as const,
         description: "General customer service inquiries",
+        externalId: null,
+        metadata: null,
         isActive: true,
         createdAt: new Date(),
       },
@@ -431,11 +458,19 @@ export class MemStorage implements IStorage {
   }
 
   async getUserByUsername(username: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(user => user.username === username);
+    const user = Array.from(this.users.values()).find(user => user.username === username);
+    if (user && user.permissions === undefined) {
+      user.permissions = {};
+    }
+    return user;
   }
 
   async getUserByEmail(email: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(user => user.email === email);
+    const user = Array.from(this.users.values()).find(user => user.email === email);
+    if (user && user.permissions === undefined) {
+      user.permissions = {};
+    }
+    return user;
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {
@@ -446,6 +481,7 @@ export class MemStorage implements IStorage {
       role: insertUser.role || "user",
       isActive: insertUser.isActive ?? true,
       lastActive: insertUser.lastActive || null,
+      permissions: insertUser.permissions || {},
     };
     this.users.set(user.id, user);
     return user;
@@ -597,6 +633,8 @@ export class MemStorage implements IStorage {
       id: randomUUID(),
       createdAt: new Date(),
       description: insertAgent.description || null,
+      externalId: insertAgent.externalId || null,
+      metadata: insertAgent.metadata || null,
       isActive: insertAgent.isActive ?? true,
     };
     this.agents.set(agent.id, agent);
@@ -921,16 +959,17 @@ export class MemStorage implements IStorage {
       const query = params.q.toLowerCase();
       filteredCalls = filteredCalls.filter(call => {
         // Search in transcript
-        const transcriptMatch = call.transcript?.some(entry => 
-          entry.text.toLowerCase().includes(query)
-        );
+        const transcriptMatch = Array.isArray(call.transcript) && 
+          (call.transcript as any[]).some((entry: any) => 
+            entry.text?.toLowerCase().includes(query)
+          );
         
         // Search in agent name
         const agent = this.agents.get(call.agentId);
         const agentMatch = agent?.name.toLowerCase().includes(query);
         
         // Search in analysis summary
-        const analysisMatch = call.analysis?.summary?.toLowerCase().includes(query);
+        const analysisMatch = (call.analysis as any)?.summary?.toLowerCase().includes(query);
         
         // Search in outcome
         const outcomeMatch = call.outcome?.toLowerCase().includes(query);
@@ -1043,13 +1082,16 @@ export class MemStorage implements IStorage {
       .slice(0, 100); // Limit to recent 100 calls
     
     for (const call of calls) {
-      if (call.transcript) {
-        for (const entry of call.transcript.slice(0, 10)) { // First 10 transcript entries
-          const words = entry.text.split(/\s+/).slice(0, 5); // First 5 words per entry
-          for (const word of words) {
-            if (word.toLowerCase().includes(lowerQuery) && word.length > 3) {
-              suggestions.add(word);
-              if (suggestions.size >= 10) break;
+      if (Array.isArray(call.transcript)) {
+        const transcript = call.transcript as any[];
+        for (const entry of transcript.slice(0, 10)) { // First 10 transcript entries
+          if (entry.text) {
+            const words = entry.text.split(/\s+/).slice(0, 5); // First 5 words per entry
+            for (const word of words) {
+              if (word.toLowerCase().includes(lowerQuery) && word.length > 3) {
+                suggestions.add(word);
+                if (suggestions.size >= 10) break;
+              }
             }
           }
         }
@@ -1148,7 +1190,7 @@ export class MemStorage implements IStorage {
     }
     
     // Calculate metrics for each time period
-    for (const [timestamp, groupCalls] of grouped) {
+    for (const [timestamp, groupCalls] of Array.from(grouped.entries())) {
       const sentimentCounts = { positive: 0, negative: 0, neutral: 0 };
       for (const call of groupCalls) {
         const sentiment = call.sentiment || 'neutral';
@@ -1158,7 +1200,7 @@ export class MemStorage implements IStorage {
       trends.push({
         timestamp,
         calls: groupCalls.length,
-        avgDuration: groupCalls.reduce((sum, call) => sum + (call.duration || 0), 0) / groupCalls.length,
+        avgDuration: groupCalls.reduce((sum: number, call: Call) => sum + (call.duration || 0), 0) / groupCalls.length,
         sentiment: sentimentCounts
       });
     }
@@ -1176,8 +1218,8 @@ export class MemStorage implements IStorage {
         agentId,
         agentName: agent.name,
         totalCalls: agentCalls.length,
-        avgDuration: agentCalls.reduce((sum, call) => sum + (call.duration || 0), 0) / agentCalls.length,
-        avgSentiment: agentCalls.reduce((sum, call) => 
+        avgDuration: agentCalls.reduce((sum: number, call: Call) => sum + (call.duration || 0), 0) / agentCalls.length,
+        avgSentiment: agentCalls.reduce((sum: number, call: Call) => 
           sum + (sentimentScores[call.sentiment as keyof typeof sentimentScores] || 0), 0
         ) / agentCalls.length,
         resolutionRate: agentCalls.filter(call => 
@@ -1196,7 +1238,8 @@ export class MemStorage implements IStorage {
       const stats = hourlyStats.get(hour)!;
       stats.calls++;
       // Simulate wait time based on metadata or use a default
-      stats.totalWait += (call.metadata?.waitTime as number) || 30;
+      const metadata = call.metadata as any;
+      stats.totalWait += metadata?.waitTime || 30;
     }
     
     const peakHours = Array.from(hourlyStats.entries())
@@ -1219,6 +1262,81 @@ export class MemStorage implements IStorage {
       agentPerformance,
       peakHours
     };
+  }
+
+  // API Keys Management
+  async getApiKey(service: string): Promise<ApiKey | undefined> {
+    return Array.from(this.apiKeys.values()).find(key => key.service === service);
+  }
+
+  async getAllApiKeys(): Promise<ApiKey[]> {
+    return Array.from(this.apiKeys.values());
+  }
+
+  async createApiKey(apiKey: InsertApiKey): Promise<ApiKey> {
+    const id = randomUUID();
+    const newKey: ApiKey = {
+      id,
+      ...apiKey,
+      lastUsed: null,
+      isActive: apiKey.isActive ?? true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    this.apiKeys.set(id, newKey);
+    return newKey;
+  }
+
+  async updateApiKey(service: string, encryptedKey: string): Promise<ApiKey | undefined> {
+    const existing = await this.getApiKey(service);
+    if (!existing) {
+      // Create new if doesn't exist
+      return this.createApiKey({ service: service as any, encryptedKey });
+    }
+    
+    const updated: ApiKey = {
+      ...existing,
+      encryptedKey,
+      updatedAt: new Date(),
+    };
+    this.apiKeys.set(existing.id, updated);
+    return updated;
+  }
+
+  async deleteApiKey(service: string): Promise<boolean> {
+    const key = await this.getApiKey(service);
+    if (key) {
+      this.apiKeys.delete(key.id);
+      return true;
+    }
+    return false;
+  }
+
+  // Permissions Management
+  async getUserPermissions(userId: string): Promise<Record<string, boolean>> {
+    const user = this.users.get(userId);
+    if (!user) return {};
+    return (user.permissions as Record<string, boolean>) || {};
+  }
+
+  async updateUserPermissions(userId: string, permissions: Record<string, boolean>): Promise<boolean> {
+    const user = this.users.get(userId);
+    if (!user) return false;
+    
+    user.permissions = permissions;
+    this.users.set(userId, user);
+    return true;
+  }
+
+  async checkUserPermission(userId: string, permission: string): Promise<boolean> {
+    const user = this.users.get(userId);
+    if (!user) return false;
+    
+    // Admins have all permissions
+    if (user.role === 'admin') return true;
+    
+    const permissions = (user.permissions as Record<string, boolean>) || {};
+    return permissions[permission] === true;
   }
 }
 

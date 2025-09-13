@@ -11,6 +11,7 @@ import Calls from "@/pages/calls";
 import Agents from "@/pages/agents";
 import Analytics from "@/pages/analytics";
 import Settings from "@/pages/settings";
+import Integrations from "@/pages/integrations";
 import NotFound from "@/pages/not-found";
 import { LoginPage } from "@/pages/login";
 import Sidebar from "@/components/layout/sidebar";
@@ -96,6 +97,11 @@ function Router() {
       <Route path="/user-management">
         <AdminRoute>
           <UserManagement />
+        </AdminRoute>
+      </Route>
+      <Route path="/integrations">
+        <AdminRoute>
+          <Integrations />
         </AdminRoute>
       </Route>
       <Route path="/settings">

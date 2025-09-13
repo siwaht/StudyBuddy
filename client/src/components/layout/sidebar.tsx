@@ -11,7 +11,8 @@ import {
   TrendingUp, 
   Users, 
   Settings,
-  Menu
+  Menu,
+  Key
 } from "lucide-react";
 import { useState } from "react";
 
@@ -24,12 +25,13 @@ const navigation = [
 
 const adminNavigation = [
   { name: "User Management", href: "/user-management", icon: Users },
+  { name: "Integrations", href: "/integrations", icon: Key },
   { name: "Settings", href: "/settings", icon: Settings },
 ];
 
 function SidebarContent() {
   const [location] = useLocation();
-  const { isAdmin } = useAuth();
+  const { isAdmin, hasPermission } = useAuth();
   
   return (
     <div className="w-60 bg-sidebar text-sidebar-foreground flex flex-col">
@@ -41,6 +43,19 @@ function SidebarContent() {
       <nav className="flex-1 p-4">
         <div className="space-y-2">
           {navigation.map((item) => {
+            // Check permissions for each navigation item
+            const permissionMap: Record<string, string> = {
+              "/dashboard": "viewDashboard",
+              "/calls": "viewCallHistory",
+              "/agents": "viewAgents",
+              "/analytics": "viewAnalytics",
+            };
+            
+            const permission = permissionMap[item.href];
+            if (permission && !hasPermission(permission)) {
+              return null; // Hide items user doesn't have permission for
+            }
+            
             const isActive = location === item.href || (item.href === "/dashboard" && location === "/");
             return (
               <Link key={item.name} href={item.href}>
@@ -66,6 +81,19 @@ function SidebarContent() {
             </h3>
             <div className="space-y-2">
               {adminNavigation.map((item) => {
+                // Check permissions for admin navigation items
+                const permissionMap: Record<string, string> = {
+                  "/user-management": "viewUserManagement",
+                  "/integrations": "viewIntegrations",
+                  "/settings": "viewSettings",
+                };
+                
+                const permission = permissionMap[item.href];
+                // Admin users always have permission, but check for completeness
+                if (permission && !hasPermission(permission)) {
+                  return null;
+                }
+                
                 const isActive = location === item.href;
                 return (
                   <Link key={item.name} href={item.href}>

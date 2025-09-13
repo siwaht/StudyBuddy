@@ -5,6 +5,8 @@ import { insertUserSchema, insertAgentSchema, insertCallSchema } from "@shared/s
 import { hashPassword, validatePassword, requireAuth, requireAdmin } from "./auth";
 import { z } from "zod";
 import * as livekit from "./livekit";
+import { elevenLabsIntegration } from "./integrations/elevenlabs";
+import { encrypt, decrypt } from "./utils/crypto";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Authentication routes
@@ -195,6 +197,60 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(userWithoutPassword);
     } catch (error) {
       res.status(500).json({ message: "Failed to update user" });
+    }
+  });
+
+  // User Permissions routes - Admin only
+  app.get("/api/users/:userId/permissions", requireAuth, requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { userId } = req.params;
+      
+      // Verify user exists
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      // Get user permissions
+      const permissions = await storage.getUserPermissions(userId);
+      res.json(permissions);
+    } catch (error) {
+      console.error('Error fetching user permissions:', error);
+      res.status(500).json({ message: "Failed to fetch user permissions" });
+    }
+  });
+
+  app.put("/api/users/:userId/permissions", requireAuth, requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { userId } = req.params;
+      const permissions = req.body;
+      
+      // Validate permissions is an object with boolean values
+      if (!permissions || typeof permissions !== 'object') {
+        return res.status(400).json({ message: "Invalid permissions format" });
+      }
+      
+      // Verify user exists
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      // Don't allow modifying admin permissions (they always have full access)
+      if (user.role === 'admin') {
+        return res.status(400).json({ message: "Cannot modify admin permissions" });
+      }
+      
+      // Update user permissions
+      const success = await storage.updateUserPermissions(userId, permissions);
+      if (!success) {
+        return res.status(500).json({ message: "Failed to update permissions" });
+      }
+      
+      res.json({ message: "Permissions updated successfully", permissions });
+    } catch (error) {
+      console.error('Error updating user permissions:', error);
+      res.status(500).json({ message: "Failed to update user permissions" });
     }
   });
 
@@ -582,6 +638,204 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(metrics);
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch performance metrics" });
+    }
+  });
+
+  // Integration Management Routes - Admin only
+  app.get("/api/integrations", requireAuth, requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const apiKeys = await storage.getAllApiKeys();
+      
+      // Don't send the actual encrypted keys to the frontend
+      const integrations = apiKeys.map(key => ({
+        service: key.service,
+        isActive: key.isActive,
+        lastUsed: key.lastUsed,
+        updatedAt: key.updatedAt,
+        hasKey: !!key.encryptedKey,
+      }));
+      
+      // Add services that don't have keys yet
+      const services = ['elevenlabs', 'livekit', 'openai'];
+      const existingServices = integrations.map(i => i.service);
+      
+      for (const service of services) {
+        if (!existingServices.includes(service as any)) {
+          integrations.push({
+            service: service as 'elevenlabs' | 'livekit' | 'openai',
+            isActive: false,
+            lastUsed: null as Date | null,
+            updatedAt: null as Date | null,
+            hasKey: false,
+          });
+        }
+      }
+      
+      res.json(integrations);
+    } catch (error) {
+      console.error('Error fetching integrations:', error);
+      res.status(500).json({ message: "Failed to fetch integrations" });
+    }
+  });
+
+  app.put("/api/integrations/:service", requireAuth, requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { service } = req.params;
+      const { apiKey } = req.body;
+      
+      if (!apiKey) {
+        return res.status(400).json({ message: "API key is required" });
+      }
+      
+      // Validate service name
+      const validServices = ['elevenlabs', 'livekit', 'openai'];
+      if (!validServices.includes(service)) {
+        return res.status(400).json({ message: "Invalid service" });
+      }
+      
+      // Encrypt the API key before storing
+      const encryptedKey = encrypt(apiKey);
+      
+      // Update or create the API key
+      const updated = await storage.updateApiKey(service, encryptedKey);
+      
+      if (!updated) {
+        return res.status(500).json({ message: "Failed to update API key" });
+      }
+      
+      // Test the connection if it's ElevenLabs
+      if (service === 'elevenlabs') {
+        const testResult = await elevenLabsIntegration.testConnection();
+        if (!testResult) {
+          return res.status(400).json({ message: "Invalid API key - connection test failed" });
+        }
+      }
+      
+      res.json({ 
+        message: "API key updated successfully",
+        service,
+        isActive: true,
+      });
+    } catch (error) {
+      console.error('Error updating API key:', error);
+      res.status(500).json({ message: "Failed to update API key" });
+    }
+  });
+
+  app.delete("/api/integrations/:service", requireAuth, requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { service } = req.params;
+      
+      const deleted = await storage.deleteApiKey(service);
+      
+      if (!deleted) {
+        return res.status(404).json({ message: "API key not found" });
+      }
+      
+      res.json({ message: "API key deleted successfully" });
+    } catch (error) {
+      console.error('Error deleting API key:', error);
+      res.status(500).json({ message: "Failed to delete API key" });
+    }
+  });
+
+  // Agent Import Routes
+  app.get("/api/agents/search/:agentId", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { agentId } = req.params;
+      const { platform } = req.query;
+      
+      if (platform !== 'elevenlabs') {
+        return res.status(400).json({ message: "Only ElevenLabs platform is currently supported" });
+      }
+      
+      // Initialize and fetch agent from ElevenLabs
+      const agent = await elevenLabsIntegration.fetchAgentById(agentId);
+      
+      if (!agent) {
+        return res.status(404).json({ message: "Agent not found in ElevenLabs" });
+      }
+      
+      const parsedAgent = elevenLabsIntegration.parseAgentForImport(agent);
+      res.json(parsedAgent);
+    } catch (error: any) {
+      console.error('Error searching for agent:', error);
+      res.status(500).json({ 
+        message: error.message || "Failed to search for agent" 
+      });
+    }
+  });
+
+  app.post("/api/agents/import", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { agentId, platform } = req.body;
+      
+      if (!agentId || !platform) {
+        return res.status(400).json({ message: "Agent ID and platform are required" });
+      }
+      
+      if (platform !== 'elevenlabs') {
+        return res.status(400).json({ message: "Only ElevenLabs platform is currently supported" });
+      }
+      
+      // Fetch agent from ElevenLabs
+      const externalAgent = await elevenLabsIntegration.fetchAgentById(agentId);
+      
+      if (!externalAgent) {
+        return res.status(404).json({ message: "Agent not found in ElevenLabs" });
+      }
+      
+      // Parse agent data
+      const agentData = elevenLabsIntegration.parseAgentForImport(externalAgent);
+      
+      // Check if agent already exists
+      const existingAgents = await storage.getAllAgents(req.user!.id);
+      const exists = existingAgents.some(a => a.externalId === agentId && a.platform === 'elevenlabs');
+      
+      if (exists) {
+        return res.status(400).json({ message: "Agent already imported" });
+      }
+      
+      // Create the agent
+      const newAgent = await storage.createAgent({
+        name: agentData.name,
+        platform: agentData.platform,
+        externalId: agentData.externalId,
+        description: agentData.description,
+        metadata: agentData.metadata,
+        isActive: true,
+      });
+      
+      // Assign the agent to the current user
+      await storage.assignAgents(req.user!.id, [newAgent.id]);
+      
+      res.status(201).json(newAgent);
+    } catch (error: any) {
+      console.error('Error importing agent:', error);
+      res.status(500).json({ 
+        message: error.message || "Failed to import agent" 
+      });
+    }
+  });
+
+  app.get("/api/agents/list-external", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { platform } = req.query;
+      
+      if (platform !== 'elevenlabs') {
+        return res.status(400).json({ message: "Only ElevenLabs platform is currently supported" });
+      }
+      
+      // List all agents from ElevenLabs
+      const agents = await elevenLabsIntegration.listAgents(20);
+      
+      const parsedAgents = agents.map(agent => elevenLabsIntegration.parseAgentForImport(agent));
+      res.json(parsedAgents);
+    } catch (error: any) {
+      console.error('Error listing external agents:', error);
+      res.status(500).json({ 
+        message: error.message || "Failed to list external agents" 
+      });
     }
   });
 

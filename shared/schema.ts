@@ -11,6 +11,7 @@ export const users = pgTable("users", {
   role: varchar("role", { enum: ["admin", "user"] }).notNull().default("user"),
   isActive: boolean("is_active").notNull().default(true),
   lastActive: timestamp("last_active"),
+  permissions: jsonb("permissions").default('{}'), // JSON object for fine-grained permissions
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
 });
 
@@ -18,7 +19,9 @@ export const agents = pgTable("agents", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
   platform: varchar("platform", { enum: ["elevenlabs", "livekit"] }).notNull(),
+  externalId: text("external_id"), // Platform-specific agent ID
   description: text("description"),
+  metadata: jsonb("metadata"), // Store platform-specific metadata
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
 });
@@ -73,6 +76,17 @@ export const userAgents = pgTable("user_agents", {
   };
 });
 
+// API Keys for external service integrations
+export const apiKeys = pgTable("api_keys", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  service: varchar("service", { enum: ["elevenlabs", "livekit", "openai"] }).notNull().unique(),
+  encryptedKey: text("encrypted_key").notNull(),
+  lastUsed: timestamp("last_used"),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+});
+
 // Insert schemas
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
@@ -104,6 +118,12 @@ export const insertUserAgentSchema = createInsertSchema(userAgents).omit({
   assignedAt: true,
 });
 
+export const insertApiKeySchema = createInsertSchema(apiKeys).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 // Types
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -122,3 +142,6 @@ export type InsertLiveKitRoom = z.infer<typeof insertLiveKitRoomSchema>;
 
 export type UserAgent = typeof userAgents.$inferSelect;
 export type InsertUserAgent = z.infer<typeof insertUserAgentSchema>;
+
+export type ApiKey = typeof apiKeys.$inferSelect;
+export type InsertApiKey = z.infer<typeof insertApiKeySchema>;

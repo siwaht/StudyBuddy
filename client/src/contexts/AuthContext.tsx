@@ -10,6 +10,7 @@ interface User {
   isActive: boolean;
   lastActive: Date | null;
   createdAt: Date;
+  permissions?: Record<string, boolean>;
 }
 
 interface AuthContextType {
@@ -19,6 +20,7 @@ interface AuthContextType {
   logout: () => Promise<void>;
   isAuthenticated: boolean;
   isAdmin: boolean;
+  hasPermission: (permission: string) => boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -76,6 +78,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await logoutMutation.mutateAsync();
   };
 
+  const hasPermission = (permission: string): boolean => {
+    if (!user) return false;
+    // Admins have all permissions
+    if (user.role === "admin") return true;
+    // Check specific permission for regular users
+    return user.permissions?.[permission] === true;
+  };
+
   const value: AuthContextType = {
     user,
     isLoading,
@@ -83,6 +93,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     logout,
     isAuthenticated: !!user,
     isAdmin: user?.role === "admin",
+    hasPermission,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

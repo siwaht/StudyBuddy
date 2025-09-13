@@ -3,12 +3,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Search, Bot, Settings } from "lucide-react";
+import { Search, Bot, Settings, Shield } from "lucide-react";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { UserWithoutPassword } from "@/lib/types";
 import type { Agent } from "@shared/schema";
 import AgentAssignmentDialog from "./agent-assignment-dialog";
+import PermissionsDialog from "./permissions-dialog";
 
 interface UsersTableProps {
   users: UserWithoutPassword[];
@@ -61,6 +62,7 @@ export default function UsersTable({ users }: UsersTableProps) {
   const [roleFilter, setRoleFilter] = useState("all");
   const [selectedUser, setSelectedUser] = useState<UserWithoutPassword | null>(null);
   const [isAssignmentDialogOpen, setIsAssignmentDialogOpen] = useState(false);
+  const [isPermissionsDialogOpen, setIsPermissionsDialogOpen] = useState(false);
 
   // Fetch user agents for all users to show counts
   const { data: userAgentsMap, isLoading: isLoadingAgents } = useQuery<Record<string, { count: number; agents: Array<{ id: string; name: string }> }>>({
@@ -70,6 +72,11 @@ export default function UsersTable({ users }: UsersTableProps) {
   const handleAssignAgents = (user: UserWithoutPassword) => {
     setSelectedUser(user);
     setIsAssignmentDialogOpen(true);
+  };
+
+  const handleManagePermissions = (user: UserWithoutPassword) => {
+    setSelectedUser(user);
+    setIsPermissionsDialogOpen(true);
   };
 
   const filteredUsers = users.filter(user => {
@@ -194,6 +201,16 @@ export default function UsersTable({ users }: UsersTableProps) {
                         variant="ghost" 
                         size="sm" 
                         className="text-primary hover:text-primary/80"
+                        onClick={() => handleManagePermissions(user)}
+                        data-testid={`button-permissions-${user.id}`}
+                      >
+                        <Shield className="h-4 w-4 mr-1" />
+                        Permissions
+                      </Button>
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        className="text-primary hover:text-primary/80"
                         data-testid={`button-edit-${user.id}`}
                       >
                         Edit
@@ -228,6 +245,12 @@ export default function UsersTable({ users }: UsersTableProps) {
         open={isAssignmentDialogOpen}
         onOpenChange={setIsAssignmentDialogOpen}
         user={selectedUser}
+      />
+      
+      <PermissionsDialog
+        user={selectedUser}
+        isOpen={isPermissionsDialogOpen}
+        onClose={() => setIsPermissionsDialogOpen(false)}
       />
     </Card>
   );

@@ -2,7 +2,9 @@ import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Bot, Settings2 } from "lucide-react";
+import { Download, Bot, Settings2, Search, AlertCircle } from "lucide-react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import {
   Dialog,
   DialogContent,
@@ -20,61 +22,137 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
+import { Separator } from "@/components/ui/separator";
+
+interface Agent {
+  id: string;
+  name: string;
+  platform: string;
+  externalId?: string;
+  description?: string;
+  metadata?: any;
+  isActive: boolean;
+  createdAt: string;
+}
 
 export default function Agents() {
-  const [isAddAgentOpen, setIsAddAgentOpen] = useState(false);
+  const [isImportAgentOpen, setIsImportAgentOpen] = useState(false);
   const [isConfigureAgentOpen, setIsConfigureAgentOpen] = useState(false);
-  const [isElevenLabsOpen, setIsElevenLabsOpen] = useState(false);
-  const [isLiveKitOpen, setIsLiveKitOpen] = useState(false);
-  const [selectedAgent, setSelectedAgent] = useState<any>(null);
-  const [newAgent, setNewAgent] = useState({
-    name: "",
-    platform: "ElevenLabs",
-    voice: "",
+  const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
+  const [importForm, setImportForm] = useState({
+    platform: "elevenlabs",
+    agentId: "",
   });
+  const [searchedAgent, setSearchedAgent] = useState<any>(null);
   const { toast } = useToast();
-  
-  const mockAgents = [
-    {
-      id: 1,
-      name: "Customer Support Agent",
-      platform: "ElevenLabs",
-      voice: "Rachel",
-      status: "active",
-      totalCalls: 1247,
-      successRate: 94
-    },
-    {
-      id: 2, 
-      name: "Sales Assistant",
-      platform: "LiveKit",
-      voice: "Adam",
-      status: "active",
-      totalCalls: 892,
-      successRate: 88
-    },
-    {
-      id: 3,
-      name: "Technical Support",
-      platform: "ElevenLabs", 
-      voice: "Domi",
-      status: "inactive",
-      totalCalls: 456,
-      successRate: 91
-    }
-  ];
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'active': return 'bg-green-100 text-green-800';
-      case 'inactive': return 'bg-gray-100 text-gray-800';
-      default: return 'bg-gray-100 text-gray-800';
+  const { data: agents = [], isLoading } = useQuery<Agent[]>({
+    queryKey: ["/api/agents"],
+  });
+
+  const searchAgentMutation = useMutation({
+    mutationFn: async ({ agentId, platform }: { agentId: string; platform: string }) => {
+      const response = await apiRequest("GET", `/api/agents/search/${agentId}?platform=${platform}`);
+      return response.json();
+    },
+    onSuccess: (data) => {
+      setSearchedAgent(data);
+      toast({
+        title: "Agent Found",
+        description: `Found agent: ${data.name}`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to find agent",
+        variant: "destructive",
+      });
+      setSearchedAgent(null);
+    },
+  });
+
+  const importAgentMutation = useMutation({
+    mutationFn: async ({ agentId, platform }: { agentId: string; platform: string }) => {
+      const response = await apiRequest("POST", "/api/agents/import", { agentId, platform });
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Success",
+        description: "Agent imported successfully",
+      });
+      setIsImportAgentOpen(false);
+      setImportForm({ platform: "elevenlabs", agentId: "" });
+      setSearchedAgent(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/agents"] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to import agent",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const toggleAgentStatusMutation = useMutation({
+    mutationFn: async ({ agentId, isActive }: { agentId: string; isActive: boolean }) => {
+      const response = await apiRequest("PATCH", `/api/agents/${agentId}`, { isActive });
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Success",
+        description: "Agent status updated",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/agents"] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update agent status",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleSearchAgent = () => {
+    if (!importForm.agentId.trim()) {
+      toast({
+        title: "Error",
+        description: "Please enter an agent ID",
+        variant: "destructive",
+      });
+      return;
     }
+    searchAgentMutation.mutate(importForm);
+  };
+
+  const handleImportAgent = () => {
+    if (!searchedAgent) return;
+    importAgentMutation.mutate(importForm);
+  };
+
+  const getStatusColor = (isActive: boolean) => {
+    return isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800';
   };
 
   const getPlatformIcon = (platform: string) => {
     return <Bot className="h-4 w-4" />;
+  };
+
+  const formatPlatformName = (platform: string) => {
+    switch (platform) {
+      case 'elevenlabs':
+        return 'ElevenLabs';
+      case 'livekit':
+        return 'LiveKit';
+      default:
+        return platform;
+    }
   };
 
   return (
@@ -85,196 +163,258 @@ export default function Agents() {
           <p className="text-muted-foreground">Manage your AI voice agents and their settings</p>
         </div>
         <Button 
-          data-testid="add-agent-button"
-          onClick={() => setIsAddAgentOpen(true)}
+          data-testid="import-agent-button"
+          onClick={() => setIsImportAgentOpen(true)}
         >
-          <Plus className="h-4 w-4 mr-2" />
-          Add Agent
+          <Download className="h-4 w-4 mr-2" />
+          Import Agent
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {mockAgents.map((agent) => (
-          <Card key={agent.id} data-testid={`agent-card-${agent.id}`}>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium flex items-center gap-2">
-                {getPlatformIcon(agent.platform)}
-                {agent.name}
-              </CardTitle>
-              <Badge className={getStatusColor(agent.status)}>
-                {agent.status}
-              </Badge>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                <div className="text-sm">
-                  <p><span className="font-medium">Platform:</span> {agent.platform}</p>
-                  <p><span className="font-medium">Voice:</span> {agent.voice}</p>
-                </div>
-                
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <p className="text-muted-foreground">Total Calls</p>
-                    <p className="font-semibold">{agent.totalCalls.toLocaleString()}</p>
+      {isLoading ? (
+        <div className="text-center py-8">
+          <p className="text-muted-foreground">Loading agents...</p>
+        </div>
+      ) : agents.length === 0 ? (
+        <Card>
+          <CardContent className="text-center py-8">
+            <Bot className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+            <p className="text-muted-foreground mb-4">No agents imported yet</p>
+            <p className="text-sm text-muted-foreground mb-4">
+              Import your first agent from ElevenLabs or LiveKit to get started
+            </p>
+            <Button onClick={() => setIsImportAgentOpen(true)}>
+              <Download className="h-4 w-4 mr-2" />
+              Import Your First Agent
+            </Button>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {agents.map((agent) => (
+            <Card key={agent.id} data-testid={`agent-card-${agent.id}`}>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium flex items-center gap-2">
+                  {getPlatformIcon(agent.platform)}
+                  {agent.name}
+                </CardTitle>
+                <Badge className={getStatusColor(agent.isActive)}>
+                  {agent.isActive ? 'Active' : 'Inactive'}
+                </Badge>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  <div className="text-sm space-y-1">
+                    <p><span className="font-medium">Platform:</span> {formatPlatformName(agent.platform)}</p>
+                    {agent.externalId && (
+                      <p className="font-mono text-xs text-muted-foreground">ID: {agent.externalId}</p>
+                    )}
+                    {agent.metadata?.voice?.name && (
+                      <p><span className="font-medium">Voice:</span> {agent.metadata.voice.name}</p>
+                    )}
+                    {agent.metadata?.language && (
+                      <p><span className="font-medium">Language:</span> {agent.metadata.language}</p>
+                    )}
                   </div>
-                  <div>
-                    <p className="text-muted-foreground">Success Rate</p>
-                    <p className="font-semibold">{agent.successRate}%</p>
+                  
+                  {agent.description && (
+                    <p className="text-xs text-muted-foreground line-clamp-2">{agent.description}</p>
+                  )}
+                  
+                  <div className="flex gap-2 pt-2">
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="flex-1" 
+                      data-testid={`configure-agent-${agent.id}`}
+                      onClick={() => {
+                        setSelectedAgent(agent);
+                        setIsConfigureAgentOpen(true);
+                      }}
+                    >
+                      <Settings2 className="h-4 w-4 mr-2" />
+                      Configure
+                    </Button>
                   </div>
                 </div>
-
-                <div className="flex gap-2 pt-2">
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    className="flex-1" 
-                    data-testid={`configure-agent-${agent.id}`}
-                    onClick={() => {
-                      setSelectedAgent(agent);
-                      setIsConfigureAgentOpen(true);
-                    }}
-                  >
-                    <Settings2 className="h-4 w-4 mr-2" />
-                    Configure
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
 
       <Card>
         <CardHeader>
-          <CardTitle>Quick Setup</CardTitle>
+          <CardTitle>Quick Info</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-2">
               <h4 className="font-semibold flex items-center gap-2">
                 <Bot className="h-4 w-4" />
-                ElevenLabs Integration
+                ElevenLabs Agents
               </h4>
               <p className="text-sm text-muted-foreground">
-                High-quality AI voice synthesis with natural conversation flow and emotion recognition.
+                Import conversational AI agents from ElevenLabs with advanced voice synthesis and natural conversation flow.
               </p>
-              <Button 
-                variant="outline" 
-                size="sm"
-                onClick={() => setIsElevenLabsOpen(true)}
-                data-testid="button-configure-elevenlabs"
-              >
-                Configure ElevenLabs
-              </Button>
+              <p className="text-xs text-muted-foreground">
+                Requires ElevenLabs API key configured in Integrations
+              </p>
             </div>
             <div className="space-y-2">
               <h4 className="font-semibold flex items-center gap-2">
                 <Bot className="h-4 w-4" />
-                LiveKit Integration  
+                LiveKit Agents
               </h4>
               <p className="text-sm text-muted-foreground">
-                Real-time audio streaming platform for low-latency voice interactions and group calls.
+                Connect real-time audio streaming agents from LiveKit for low-latency voice interactions.
               </p>
-              <Button 
-                variant="outline" 
-                size="sm"
-                onClick={() => setIsLiveKitOpen(true)}
-                data-testid="button-configure-livekit"
-              >
-                Configure LiveKit
-              </Button>
+              <p className="text-xs text-muted-foreground">
+                Requires LiveKit API key configured in Integrations
+              </p>
             </div>
           </div>
         </CardContent>
       </Card>
       
-      {/* Add Agent Dialog */}
-      <Dialog open={isAddAgentOpen} onOpenChange={setIsAddAgentOpen}>
-        <DialogContent>
+      {/* Import Agent Dialog */}
+      <Dialog open={isImportAgentOpen} onOpenChange={(open) => {
+        setIsImportAgentOpen(open);
+        if (!open) {
+          setSearchedAgent(null);
+          setImportForm({ platform: "elevenlabs", agentId: "" });
+        }
+      }}>
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Add New Agent</DialogTitle>
+            <DialogTitle>Import Agent</DialogTitle>
             <DialogDescription>
-              Configure a new AI voice agent for your system.
+              Import an existing AI voice agent from ElevenLabs or LiveKit.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="agent-name" className="text-right">
-                Name
-              </Label>
-              <Input
-                id="agent-name"
-                value={newAgent.name}
-                onChange={(e) => setNewAgent({ ...newAgent, name: e.target.value })}
-                className="col-span-3"
-                placeholder="Customer Support Agent"
-                data-testid="input-agent-name"
-              />
-            </div>
             <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="platform" className="text-right">
                 Platform
               </Label>
               <Select
-                value={newAgent.platform}
-                onValueChange={(value) => setNewAgent({ ...newAgent, platform: value })}
+                value={importForm.platform}
+                onValueChange={(value) => {
+                  setImportForm({ ...importForm, platform: value });
+                  setSearchedAgent(null);
+                }}
               >
                 <SelectTrigger className="col-span-3" data-testid="select-platform">
                   <SelectValue placeholder="Select platform" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="ElevenLabs">ElevenLabs</SelectItem>
-                  <SelectItem value="LiveKit">LiveKit</SelectItem>
+                  <SelectItem value="elevenlabs">ElevenLabs</SelectItem>
+                  <SelectItem value="livekit" disabled>LiveKit (Coming Soon)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="voice" className="text-right">
-                Voice
+              <Label htmlFor="agent-id" className="text-right">
+                Agent ID
               </Label>
-              <Input
-                id="voice"
-                value={newAgent.voice}
-                onChange={(e) => setNewAgent({ ...newAgent, voice: e.target.value })}
-                className="col-span-3"
-                placeholder="Rachel"
-                data-testid="input-voice"
-              />
+              <div className="col-span-3 flex gap-2">
+                <Input
+                  id="agent-id"
+                  value={importForm.agentId}
+                  onChange={(e) => {
+                    setImportForm({ ...importForm, agentId: e.target.value });
+                    setSearchedAgent(null);
+                  }}
+                  placeholder={importForm.platform === 'elevenlabs' ? "Enter ElevenLabs agent ID" : "Enter agent ID"}
+                  data-testid="input-agent-id"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleSearchAgent}
+                  disabled={!importForm.agentId.trim() || searchAgentMutation.isPending}
+                  data-testid="button-search-agent"
+                >
+                  {searchAgentMutation.isPending ? (
+                    "Searching..."
+                  ) : (
+                    <>
+                      <Search className="h-4 w-4 mr-2" />
+                      Search
+                    </>
+                  )}
+                </Button>
+              </div>
             </div>
+            
+            {importForm.platform === 'elevenlabs' && (
+              <Alert>
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  You can find your agent ID in the ElevenLabs dashboard under Conversational AI → Agents
+                </AlertDescription>
+              </Alert>
+            )}
+            
+            {searchedAgent && (
+              <>
+                <Separator />
+                <div className="space-y-4">
+                  <h4 className="font-semibold">Agent Details</h4>
+                  <div className="grid gap-2 text-sm">
+                    <div className="grid grid-cols-4 gap-4">
+                      <span className="text-right text-muted-foreground">Name:</span>
+                      <span className="col-span-3 font-medium">{searchedAgent.name}</span>
+                    </div>
+                    <div className="grid grid-cols-4 gap-4">
+                      <span className="text-right text-muted-foreground">Platform:</span>
+                      <span className="col-span-3">{formatPlatformName(searchedAgent.platform)}</span>
+                    </div>
+                    <div className="grid grid-cols-4 gap-4">
+                      <span className="text-right text-muted-foreground">External ID:</span>
+                      <span className="col-span-3 font-mono text-xs">{searchedAgent.externalId}</span>
+                    </div>
+                    {searchedAgent.description && (
+                      <div className="grid grid-cols-4 gap-4">
+                        <span className="text-right text-muted-foreground">Description:</span>
+                        <span className="col-span-3">{searchedAgent.description}</span>
+                      </div>
+                    )}
+                    {searchedAgent.metadata?.voice?.name && (
+                      <div className="grid grid-cols-4 gap-4">
+                        <span className="text-right text-muted-foreground">Voice:</span>
+                        <span className="col-span-3">{searchedAgent.metadata.voice.name}</span>
+                      </div>
+                    )}
+                    {searchedAgent.metadata?.language && (
+                      <div className="grid grid-cols-4 gap-4">
+                        <span className="text-right text-muted-foreground">Language:</span>
+                        <span className="col-span-3">{searchedAgent.metadata.language}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
           </div>
           <DialogFooter>
             <Button
               variant="outline"
               onClick={() => {
-                setIsAddAgentOpen(false);
-                setNewAgent({ name: "", platform: "ElevenLabs", voice: "" });
+                setIsImportAgentOpen(false);
+                setImportForm({ platform: "elevenlabs", agentId: "" });
+                setSearchedAgent(null);
               }}
-              data-testid="button-cancel-agent"
+              data-testid="button-cancel-import"
             >
               Cancel
             </Button>
             <Button
-              onClick={() => {
-                if (!newAgent.name || !newAgent.voice) {
-                  toast({
-                    title: "Error",
-                    description: "Please fill in all required fields",
-                    variant: "destructive",
-                  });
-                  return;
-                }
-                
-                toast({
-                  title: "Agent Added",
-                  description: `Agent ${newAgent.name} has been successfully created`,
-                });
-                
-                setIsAddAgentOpen(false);
-                setNewAgent({ name: "", platform: "ElevenLabs", voice: "" });
-              }}
-              data-testid="button-save-agent"
+              onClick={handleImportAgent}
+              disabled={!searchedAgent || importAgentMutation.isPending}
+              data-testid="button-import-agent"
             >
-              Add Agent
+              {importAgentMutation.isPending ? "Importing..." : "Import Agent"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -294,7 +434,17 @@ export default function Agents() {
               <Label htmlFor="config-status" className="text-right">
                 Status
               </Label>
-              <Select defaultValue={selectedAgent?.status}>
+              <Select 
+                value={selectedAgent?.isActive ? "active" : "inactive"}
+                onValueChange={(value) => {
+                  if (selectedAgent) {
+                    toggleAgentStatusMutation.mutate({
+                      agentId: selectedAgent.id,
+                      isActive: value === "active",
+                    });
+                  }
+                }}
+              >
                 <SelectTrigger className="col-span-3" data-testid="select-status">
                   <SelectValue placeholder="Select status" />
                 </SelectTrigger>
@@ -304,17 +454,22 @@ export default function Agents() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="config-voice" className="text-right">
-                Voice
-              </Label>
-              <Input
-                id="config-voice"
-                defaultValue={selectedAgent?.voice}
-                className="col-span-3"
-                data-testid="input-config-voice"
-              />
+            <div className="grid grid-cols-4 gap-4">
+              <span className="text-right text-muted-foreground text-sm">Platform:</span>
+              <span className="col-span-3 text-sm">{selectedAgent && formatPlatformName(selectedAgent.platform)}</span>
             </div>
+            {selectedAgent?.externalId && (
+              <div className="grid grid-cols-4 gap-4">
+                <span className="text-right text-muted-foreground text-sm">External ID:</span>
+                <span className="col-span-3 font-mono text-xs">{selectedAgent.externalId}</span>
+              </div>
+            )}
+            {selectedAgent?.metadata?.voice?.name && (
+              <div className="grid grid-cols-4 gap-4">
+                <span className="text-right text-muted-foreground text-sm">Voice:</span>
+                <span className="col-span-3 text-sm">{selectedAgent.metadata.voice.name}</span>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button
@@ -323,153 +478,9 @@ export default function Agents() {
                 setIsConfigureAgentOpen(false);
                 setSelectedAgent(null);
               }}
-              data-testid="button-cancel-config"
+              data-testid="button-close-config"
             >
-              Cancel
-            </Button>
-            <Button
-              onClick={() => {
-                toast({
-                  title: "Agent Updated",
-                  description: `Settings for ${selectedAgent?.name} have been saved`,
-                });
-                setIsConfigureAgentOpen(false);
-                setSelectedAgent(null);
-              }}
-              data-testid="button-save-config"
-            >
-              Save Changes
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-      
-      {/* ElevenLabs Configuration Dialog */}
-      <Dialog open={isElevenLabsOpen} onOpenChange={setIsElevenLabsOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Configure ElevenLabs Integration</DialogTitle>
-            <DialogDescription>
-              Set up your ElevenLabs API connection for AI voice synthesis.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="elevenlabs-api" className="text-right">
-                API Key
-              </Label>
-              <Input
-                id="elevenlabs-api"
-                type="password"
-                className="col-span-3"
-                placeholder="Enter your ElevenLabs API key"
-                data-testid="input-elevenlabs-api"
-              />
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="elevenlabs-model" className="text-right">
-                Model
-              </Label>
-              <Select defaultValue="eleven_multilingual_v2">
-                <SelectTrigger className="col-span-3" data-testid="select-elevenlabs-model">
-                  <SelectValue placeholder="Select model" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="eleven_multilingual_v2">Multilingual v2</SelectItem>
-                  <SelectItem value="eleven_monolingual_v1">Monolingual v1</SelectItem>
-                  <SelectItem value="eleven_turbo_v2">Turbo v2</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setIsElevenLabsOpen(false)}
-              data-testid="button-cancel-elevenlabs"
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={() => {
-                toast({
-                  title: "ElevenLabs Configured",
-                  description: "Your ElevenLabs integration has been set up successfully",
-                });
-                setIsElevenLabsOpen(false);
-              }}
-              data-testid="button-save-elevenlabs"
-            >
-              Save Configuration
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-      
-      {/* LiveKit Configuration Dialog */}
-      <Dialog open={isLiveKitOpen} onOpenChange={setIsLiveKitOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Configure LiveKit Integration</DialogTitle>
-            <DialogDescription>
-              Set up your LiveKit connection for real-time audio streaming.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="livekit-url" className="text-right">
-                Server URL
-              </Label>
-              <Input
-                id="livekit-url"
-                className="col-span-3"
-                placeholder="wss://your-livekit-server.com"
-                data-testid="input-livekit-url"
-              />
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="livekit-api" className="text-right">
-                API Key
-              </Label>
-              <Input
-                id="livekit-api"
-                className="col-span-3"
-                placeholder="Enter your LiveKit API key"
-                data-testid="input-livekit-api"
-              />
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="livekit-secret" className="text-right">
-                API Secret
-              </Label>
-              <Input
-                id="livekit-secret"
-                type="password"
-                className="col-span-3"
-                placeholder="Enter your LiveKit API secret"
-                data-testid="input-livekit-secret"
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setIsLiveKitOpen(false)}
-              data-testid="button-cancel-livekit"
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={() => {
-                toast({
-                  title: "LiveKit Configured",
-                  description: "Your LiveKit integration has been set up successfully",
-                });
-                setIsLiveKitOpen(false);
-              }}
-              data-testid="button-save-livekit"
-            >
-              Save Configuration
+              Close
             </Button>
           </DialogFooter>
         </DialogContent>
