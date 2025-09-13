@@ -1,6 +1,7 @@
 import express, { type Request, Response, NextFunction } from "express";
 import session from "express-session";
-import MemoryStore from "memorystore";
+import connectPgSimple from "connect-pg-simple";
+import { pool } from "./db";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { authenticate } from "./auth";
@@ -9,9 +10,8 @@ const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
-// Configure session middleware with memory store
-// In production, you would use connect-pg-simple with PostgreSQL
-const SessionStore = MemoryStore(session);
+// Configure session middleware with PostgreSQL store for scalability
+const PgSession = connectPgSimple(session);
 
 // Ensure session secret is set
 const sessionSecret = process.env.SESSION_SECRET;
@@ -22,12 +22,16 @@ if (!sessionSecret) {
   console.warn('WARNING: Using default session secret in development. Set SESSION_SECRET for production.');
 }
 
+// Use PostgreSQL for session storage to support horizontal scaling
 app.use(session({
   secret: sessionSecret || 'dev-secret-only-for-development',
   resave: false,
   saveUninitialized: false,
-  store: new SessionStore({
-    checkPeriod: 86400000 // prune expired entries every 24h
+  store: new PgSession({
+    pool: pool,                // Use the existing database connection pool
+    tableName: 'user_sessions', // Table to store sessions
+    createTableIfMissing: true, // Auto-create the session table if it doesn't exist
+    pruneSessionInterval: 60 * 60, // Clean up expired sessions every hour (in seconds)
   }),
   cookie: {
     httpOnly: true,
