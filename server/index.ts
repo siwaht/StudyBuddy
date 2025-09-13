@@ -1,10 +1,45 @@
 import express, { type Request, Response, NextFunction } from "express";
+import session from "express-session";
+import MemoryStore from "memorystore";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
+import { authenticate } from "./auth";
 
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
+
+// Configure session middleware with memory store
+// In production, you would use connect-pg-simple with PostgreSQL
+const SessionStore = MemoryStore(session);
+
+// Ensure session secret is set
+const sessionSecret = process.env.SESSION_SECRET;
+if (!sessionSecret) {
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('SESSION_SECRET environment variable is required in production');
+  }
+  console.warn('WARNING: Using default session secret in development. Set SESSION_SECRET for production.');
+}
+
+app.use(session({
+  secret: sessionSecret || 'dev-secret-only-for-development',
+  resave: false,
+  saveUninitialized: false,
+  store: new SessionStore({
+    checkPeriod: 86400000 // prune expired entries every 24h
+  }),
+  cookie: {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    maxAge: 24 * 60 * 60 * 1000 // 24 hours
+  },
+  name: 'sid'
+}));
+
+// Add authentication middleware to populate req.user
+app.use(authenticate);
 
 app.use((req, res, next) => {
   const start = Date.now();

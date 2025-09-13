@@ -7,6 +7,7 @@ import {
   type UserAgent, type InsertUserAgent
 } from "@shared/schema";
 import { randomUUID } from "crypto";
+import bcrypt from "bcryptjs";
 
 export interface IStorage {
   // Users
@@ -16,6 +17,10 @@ export interface IStorage {
   createUser(user: InsertUser): Promise<User>;
   updateUser(id: string, updates: Partial<User>): Promise<User | undefined>;
   getAllUsers(): Promise<User[]>;
+  
+  // Authentication
+  validatePassword(userId: string, password: string): Promise<boolean>;
+  updatePassword(userId: string, hashedPassword: string): Promise<boolean>;
 
   // User-Agent Assignments (Multi-tenancy)
   getAssignedAgentIds(userId: string): Promise<string[]>;
@@ -69,17 +74,24 @@ export class MemStorage implements IStorage {
   private userAgents: Map<string, UserAgent> = new Map();
 
   constructor() {
-    this.seedData();
+    this.seedDataAsync();
   }
 
-  private seedData() {
-    // Seed users - 2 admins and 3 regular users
+  private async seedDataAsync() {
+    await this.seedData();
+  }
+
+  private async seedData() {
+    // Seed users - 2 admins and 3 regular users with properly hashed passwords
+    // Default password for all test users: "password123"
+    const hashedPassword = await bcrypt.hash("password123", 10);
+    
     const users = [
       {
         id: randomUUID(),
         username: "alice.johnson",
         email: "alice@company.com",
-        password: "hashedPassword",
+        password: hashedPassword,
         role: "admin" as const,
         isActive: true,
         lastActive: new Date(Date.now() - 2 * 60 * 60 * 1000), // 2 hours ago
@@ -89,7 +101,7 @@ export class MemStorage implements IStorage {
         id: randomUUID(),
         username: "admin.smith",
         email: "admin.smith@company.com",
-        password: "hashedPassword",
+        password: hashedPassword,
         role: "admin" as const,
         isActive: true,
         lastActive: new Date(Date.now() - 1 * 60 * 60 * 1000), // 1 hour ago
@@ -99,7 +111,7 @@ export class MemStorage implements IStorage {
         id: randomUUID(),
         username: "bob.wilson",
         email: "bob@company.com",
-        password: "hashedPassword",
+        password: hashedPassword,
         role: "user" as const,
         isActive: true,
         lastActive: new Date(Date.now() - 24 * 60 * 60 * 1000), // 1 day ago
@@ -109,7 +121,7 @@ export class MemStorage implements IStorage {
         id: randomUUID(),
         username: "sarah.connors",
         email: "sarah@company.com",
-        password: "hashedPassword",
+        password: hashedPassword,
         role: "user" as const,
         isActive: true,
         lastActive: new Date(Date.now() - 30 * 60 * 1000), // 30 minutes ago
@@ -119,7 +131,7 @@ export class MemStorage implements IStorage {
         id: randomUUID(),
         username: "john.doe",
         email: "john@company.com",
-        password: "hashedPassword",
+        password: hashedPassword,
         role: "user" as const,
         isActive: true,
         lastActive: new Date(Date.now() - 4 * 60 * 60 * 1000), // 4 hours ago
@@ -383,6 +395,20 @@ export class MemStorage implements IStorage {
 
   async getAllUsers(): Promise<User[]> {
     return Array.from(this.users.values());
+  }
+
+  // Authentication methods
+  async validatePassword(userId: string, password: string): Promise<boolean> {
+    const user = await this.getUser(userId);
+    if (!user) return false;
+    return bcrypt.compare(password, user.password);
+  }
+
+  async updatePassword(userId: string, hashedPassword: string): Promise<boolean> {
+    const user = await this.getUser(userId);
+    if (!user) return false;
+    await this.updateUser(userId, { password: hashedPassword });
+    return true;
   }
 
   // User-Agent Assignment methods
