@@ -1,5 +1,5 @@
 import { useLocation } from "wouter";
-import { Calendar, LogOut, User } from "lucide-react";
+import { Calendar, LogOut, User, ChevronDown } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   DropdownMenu,
@@ -10,6 +10,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 const getPageInfo = (pathname: string) => {
   switch (pathname) {
@@ -72,15 +78,25 @@ export default function Header() {
           </div>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                className="relative h-12 w-12 rounded-full p-0 hover:opacity-90 transition-opacity"
-                data-testid="button-user-menu"
-              >
-                <div className="w-full h-full bg-gradient-to-br from-purple-500 via-purple-600 to-indigo-600 rounded-full flex items-center justify-center text-white font-bold text-base shadow-lg ring-2 ring-purple-500/20 ring-offset-2 ring-offset-background">
-                  {getUserInitials()}
-                </div>
-              </Button>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      className="relative flex items-center gap-1 h-12 px-2 rounded-full hover:opacity-90 transition-all hover:bg-purple-50 dark:hover:bg-purple-950/30"
+                      data-testid="button-user-menu"
+                    >
+                      <div className="h-10 w-10 bg-gradient-to-br from-purple-500 via-purple-600 to-indigo-600 rounded-full flex items-center justify-center text-white font-bold text-sm shadow-lg ring-2 ring-purple-500/20">
+                        {getUserInitials()}
+                      </div>
+                      <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">
+                    <p>Account menu</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             </DropdownMenuTrigger>
             <DropdownMenuContent className="w-64 bg-card/95 backdrop-blur-md border-purple-500/20" align="end" forceMount>
               <DropdownMenuLabel className="font-normal pb-3">
@@ -108,12 +124,12 @@ export default function Header() {
               </DropdownMenuItem>
               <DropdownMenuSeparator className="bg-purple-100 dark:bg-purple-900/30" />
               <DropdownMenuItem
-                className="cursor-pointer text-destructive hover:text-destructive hover:bg-red-50 dark:hover:bg-red-950/30 focus:text-destructive focus:bg-red-50 dark:focus:bg-red-950/30"
+                className="cursor-pointer bg-red-50 dark:bg-red-950/30 text-destructive hover:bg-red-100 dark:hover:bg-red-950/50 focus:bg-red-100 dark:focus:bg-red-950/50 font-medium"
                 onClick={handleLogout}
                 data-testid="button-logout"
               >
                 <LogOut className="mr-2 h-4 w-4" />
-                <span className="font-medium">Log out</span>
+                <span className="font-semibold">Sign Out</span>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
