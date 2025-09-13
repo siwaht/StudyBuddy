@@ -365,14 +365,14 @@ export default function Agents() {
           setImportForm({ platform: "elevenlabs", agentId: "", accountId: "" });
         }
       }}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>Import Agent</DialogTitle>
             <DialogDescription>
               Import an existing AI voice agent from ElevenLabs or LiveKit.
             </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-4 py-4">
+          <div className="grid gap-4 py-4 overflow-y-auto flex-1">
             <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="platform" className="text-right">
                 Platform
