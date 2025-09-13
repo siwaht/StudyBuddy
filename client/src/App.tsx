@@ -9,6 +9,7 @@ import CallDetail from "@/pages/call-detail";
 import UserManagement from "@/pages/user-management";
 import Calls from "@/pages/calls";
 import Agents from "@/pages/agents";
+import Playground from "@/pages/playground";
 import Analytics from "@/pages/analytics";
 import Settings from "@/pages/settings";
 import Integrations from "@/pages/integrations";
@@ -88,6 +89,11 @@ function Router() {
       <Route path="/agents">
         <ProtectedRoute>
           <Agents />
+        </ProtectedRoute>
+      </Route>
+      <Route path="/playground">
+        <ProtectedRoute>
+          <Playground />
         </ProtectedRoute>
       </Route>
       <Route path="/analytics">

@@ -1006,11 +1006,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         );
         
         // Update agent's metadata with last sync info
+        const currentMetadata = (agent.metadata || {}) as Record<string, any>;
         await storage.updateAgent(agentId, {
           metadata: {
-            ...agent.metadata,
+            ...currentMetadata,
             lastSyncedAt: new Date().toISOString(),
-            totalConversations: (agent.metadata?.totalConversations || 0) + importResults.imported,
+            totalConversations: (currentMetadata.totalConversations || 0) + importResults.imported,
           }
         });
         
@@ -1130,6 +1131,110 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error('Error importing conversations:', error);
       res.status(500).json({ 
         message: "Failed to import conversations",
+        error: error.message 
+      });
+    }
+  });
+
+  // Playground Routes
+  app.post("/api/playground/start", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { agentId } = req.body;
+      const userId = req.user!.id;
+      
+      // Verify the agent exists and user has access
+      const agent = await storage.getAgent(userId, agentId);
+      if (!agent) {
+        return res.status(404).json({ message: "Agent not found" });
+      }
+      
+      if (agent.platform !== 'elevenlabs') {
+        return res.status(400).json({ 
+          message: "Playground is currently only available for ElevenLabs agents" 
+        });
+      }
+      
+      // Create playground session record
+      const session = await storage.createPlaygroundSession({
+        agentId,
+        userId,
+        sessionId: agent.externalId,
+        duration: null,
+        transcript: null,
+        metadata: {
+          agentName: agent.name,
+          startedAt: new Date().toISOString(),
+        },
+      });
+      
+      // For public agents, return the agent ID directly
+      // For private agents, you would generate a signed URL here
+      res.json({
+        sessionId: session.id,
+        agentId: agent.externalId,
+        // signedUrl: would be generated for private agents
+        message: "Playground session started",
+      });
+    } catch (error: any) {
+      console.error('Error starting playground session:', error);
+      res.status(500).json({ 
+        message: "Failed to start playground session",
+        error: error.message 
+      });
+    }
+  });
+  
+  app.delete("/api/playground/:sessionId", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { sessionId } = req.params;
+      const userId = req.user!.id;
+      
+      // Get the session to verify ownership
+      const session = await storage.getPlaygroundSession(sessionId);
+      if (!session) {
+        return res.status(404).json({ message: "Session not found" });
+      }
+      
+      if (session.userId !== userId) {
+        return res.status(403).json({ message: "Not authorized to end this session" });
+      }
+      
+      // Calculate duration if not already set
+      const startedAt = session.metadata?.startedAt ? new Date(session.metadata.startedAt) : session.createdAt;
+      const duration = Math.floor((Date.now() - startedAt.getTime()) / 1000);
+      
+      // Update session with final data
+      await storage.updatePlaygroundSession(sessionId, {
+        duration,
+        metadata: {
+          ...session.metadata,
+          endedAt: new Date().toISOString(),
+        },
+      });
+      
+      res.json({
+        message: "Playground session ended",
+        duration,
+      });
+    } catch (error: any) {
+      console.error('Error ending playground session:', error);
+      res.status(500).json({ 
+        message: "Failed to end playground session",
+        error: error.message 
+      });
+    }
+  });
+  
+  app.get("/api/playground/sessions", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const userId = req.user!.id;
+      const sessions = await storage.getPlaygroundSessionsByUser(userId);
+      
+      res.json(sessions);
+    } catch (error: any) {
+      console.error('Error fetching playground sessions:', error);
+      res.status(500).json({ 
+        message: "Failed to fetch playground sessions",
         error: error.message 
       });
     }
