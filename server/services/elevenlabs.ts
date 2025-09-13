@@ -60,7 +60,8 @@ class ElevenLabsService {
   }
 
   isConfigured(): boolean {
-    return !!this.client;
+    // Check if we have an API key available from any source
+    return !!(this.apiKey || process.env.ELEVENLABS_API_KEY);
   }
 
   // Generate signed URL for private agents

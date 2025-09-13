@@ -8,6 +8,7 @@ interface AudioPlayerProps {
   duration?: number;
   metadata?: any;
   call?: {
+    id?: string;
     agent?: {
       name: string;
       platform: string;
