@@ -23,39 +23,57 @@ class ElevenLabsService {
   // Get API key from account or environment
   async getApiKey(accountId?: string): Promise<string | null> {
     try {
-      let apiKey: string | null = null;
+      // First, try to get from environment variable (most reliable)
+      let apiKey: string | null = process.env.ELEVENLABS_API_KEY || null;
       
-      // If accountId is provided, get that specific account
-      if (accountId) {
-        const account = await storage.getAccount(accountId);
-        if (account && account.isActive && account.service === 'elevenlabs') {
-          apiKey = decrypt(account.encryptedApiKey);
-        }
-      }
-      
-      // Otherwise, get the first active ElevenLabs account
+      // If no environment variable, try database
       if (!apiKey) {
-        const accounts = await storage.getAccountsByService('elevenlabs');
-        const activeAccount = accounts.find((a: any) => a.isActive);
-        if (activeAccount) {
-          apiKey = decrypt(activeAccount.encryptedApiKey);
+        // If accountId is provided, get that specific account
+        if (accountId) {
+          const account = await storage.getAccount(accountId);
+          if (account && account.isActive && account.service === 'elevenlabs') {
+            const dbKey = decrypt(account.encryptedApiKey);
+            // Check if the decrypted key is valid (should be alphanumeric with dashes)
+            if (dbKey && /^[a-zA-Z0-9-_]{20,}$/.test(dbKey.trim())) {
+              apiKey = dbKey;
+            }
+          }
+        }
+        
+        // Otherwise, get the first active ElevenLabs account
+        if (!apiKey) {
+          const accounts = await storage.getAccountsByService('elevenlabs');
+          const activeAccount = accounts.find((a: any) => a.isActive);
+          if (activeAccount) {
+            const dbKey = decrypt(activeAccount.encryptedApiKey);
+            // Check if the decrypted key is valid
+            if (dbKey && /^[a-zA-Z0-9-_]{20,}$/.test(dbKey.trim())) {
+              apiKey = dbKey;
+            }
+          }
         }
       }
 
-      // Fallback to instance API key or environment variable
+      // Fallback to instance API key
       if (!apiKey) {
-        apiKey = this.apiKey || process.env.ELEVENLABS_API_KEY || null;
+        apiKey = this.apiKey || null;
       }
 
-      // Clean the API key - remove whitespace, newlines, and control characters
+      // Clean the API key - remove whitespace
       if (apiKey) {
-        apiKey = apiKey.trim().replace(/[\r\n\t]/g, '').replace(/[^\x20-\x7E]/g, '');
+        apiKey = apiKey.trim();
+        // Validate the key format (should be alphanumeric with dashes/underscores)
+        if (!/^[a-zA-Z0-9-_]{20,}$/.test(apiKey)) {
+          console.error('Invalid API key format detected, falling back to environment variable');
+          apiKey = process.env.ELEVENLABS_API_KEY || null;
+        }
       }
 
       return apiKey;
     } catch (error) {
       console.error('Failed to get ElevenLabs API key:', error);
-      return null;
+      // Fallback to environment variable on error
+      return process.env.ELEVENLABS_API_KEY || null;
     }
   }
 
