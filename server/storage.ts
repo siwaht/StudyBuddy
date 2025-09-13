@@ -1,12 +1,16 @@
 import { 
   users, agents, calls, performanceMetrics, liveKitRooms, userAgents, accounts,
+  phoneNumbers, syncHistory, playgroundSessions,
   type User, type InsertUser,
   type Agent, type InsertAgent,
   type Call, type InsertCall,
   type PerformanceMetric, type InsertPerformanceMetric,
   type LiveKitRoom, type InsertLiveKitRoom,
   type UserAgent, type InsertUserAgent,
-  type Account, type InsertAccount
+  type Account, type InsertAccount,
+  type PhoneNumber, type InsertPhoneNumber,
+  type SyncHistory, type InsertSyncHistory,
+  type PlaygroundSession, type InsertPlaygroundSession
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, or, sql, desc, asc, between, like, inArray, gte, lte, not, isNull, isNotNull } from "drizzle-orm";
@@ -149,6 +153,41 @@ export interface IStorage {
   getUserPermissions(userId: string): Promise<Record<string, boolean>>;
   updateUserPermissions(userId: string, permissions: Record<string, boolean>): Promise<boolean>;
   checkUserPermission(userId: string, permission: string): Promise<boolean>;
+
+  // Phone Numbers Management
+  getPhoneNumber(phoneNumberId: string): Promise<PhoneNumber | undefined>;
+  getAllPhoneNumbers(): Promise<PhoneNumber[]>;
+  getPhoneNumbersByAgent(agentId: string): Promise<PhoneNumber[]>;
+  createPhoneNumber(phoneNumber: InsertPhoneNumber): Promise<PhoneNumber>;
+  updatePhoneNumber(id: string, updates: Partial<PhoneNumber>): Promise<PhoneNumber | undefined>;
+  deletePhoneNumber(id: string): Promise<boolean>;
+
+  // Sync History Management
+  getSyncHistory(agentId: string): Promise<SyncHistory[]>;
+  getLatestSync(agentId: string): Promise<SyncHistory | undefined>;
+  createSyncHistory(sync: InsertSyncHistory): Promise<SyncHistory>;
+  updateSyncHistory(id: string, updates: Partial<SyncHistory>): Promise<SyncHistory | undefined>;
+
+  // Playground Sessions Management
+  getPlaygroundSession(sessionId: string): Promise<PlaygroundSession | undefined>;
+  getPlaygroundSessionsByUser(userId: string): Promise<PlaygroundSession[]>;
+  getPlaygroundSessionsByAgent(agentId: string): Promise<PlaygroundSession[]>;
+  createPlaygroundSession(session: InsertPlaygroundSession): Promise<PlaygroundSession>;
+  updatePlaygroundSession(id: string, updates: Partial<PlaygroundSession>): Promise<PlaygroundSession | undefined>;
+
+  // Advanced Sync Operations
+  syncAgent(agentId: string, userId: string): Promise<{
+    conversations: number;
+    transcripts: number;
+    analytics: number;
+    errors: string[];
+  }>;
+  bulkImportConversations(agentId: string, conversations: any[]): Promise<{
+    imported: number;
+    skipped: number;
+    failed: number;
+  }>;
+  importConversationFromElevenLabs(agentId: string, conversation: any): Promise<Call | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1170,7 +1209,7 @@ export class DatabaseStorage implements IStorage {
   async importConversationFromElevenLabs(
     agentId: string,
     conversation: any
-  ): Promise<string | null> {
+  ): Promise<Call | undefined> {
     try {
       // Generate a unique call ID based on the conversation ID
       const callId = `EL-${conversation.conversation_id}`;
@@ -1181,7 +1220,7 @@ export class DatabaseStorage implements IStorage {
       
       if (existingCall) {
         console.log(`Conversation ${callId} already imported, skipping`);
-        return null;
+        return undefined;
       }
 
       // Calculate duration in seconds
@@ -1212,13 +1251,13 @@ export class DatabaseStorage implements IStorage {
       };
 
       // Insert the call with custom ID
-      await db.insert(calls).values(callData);
+      const [insertedCall] = await db.insert(calls).values(callData).returning();
       
       console.log(`Imported conversation ${callId} successfully`);
-      return callId;
+      return insertedCall;
     } catch (error) {
       console.error(`Failed to import conversation ${conversation.conversation_id}:`, error);
-      return null;
+      return undefined;
     }
   }
 
@@ -1308,6 +1347,118 @@ export class DatabaseStorage implements IStorage {
     
     const permissions = (user.permissions as Record<string, boolean>) || {};
     return permissions[permission] === true;
+  }
+
+  // Phone Numbers Management
+  async getPhoneNumber(phoneNumberId: string): Promise<PhoneNumber | undefined> {
+    const [phoneNumber] = await db.select().from(phoneNumbers)
+      .where(eq(phoneNumbers.id, phoneNumberId));
+    return phoneNumber || undefined;
+  }
+
+  async getAllPhoneNumbers(): Promise<PhoneNumber[]> {
+    return await db.select().from(phoneNumbers);
+  }
+
+  async getPhoneNumbersByAgent(agentId: string): Promise<PhoneNumber[]> {
+    return await db.select().from(phoneNumbers)
+      .where(eq(phoneNumbers.agentId, agentId));
+  }
+
+  async createPhoneNumber(phoneNumber: InsertPhoneNumber): Promise<PhoneNumber> {
+    const [created] = await db.insert(phoneNumbers).values(phoneNumber).returning();
+    return created;
+  }
+
+  async updatePhoneNumber(id: string, updates: Partial<PhoneNumber>): Promise<PhoneNumber | undefined> {
+    const [updated] = await db.update(phoneNumbers)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(phoneNumbers.id, id))
+      .returning();
+    return updated || undefined;
+  }
+
+  async deletePhoneNumber(id: string): Promise<boolean> {
+    const result = await db.delete(phoneNumbers)
+      .where(eq(phoneNumbers.id, id));
+    return !!result;
+  }
+
+  // Sync History Management
+  async getSyncHistory(agentId: string): Promise<SyncHistory[]> {
+    return await db.select().from(syncHistory)
+      .where(eq(syncHistory.agentId, agentId))
+      .orderBy(desc(syncHistory.startedAt));
+  }
+
+  async getLatestSync(agentId: string): Promise<SyncHistory | undefined> {
+    const [latest] = await db.select().from(syncHistory)
+      .where(eq(syncHistory.agentId, agentId))
+      .orderBy(desc(syncHistory.startedAt))
+      .limit(1);
+    return latest || undefined;
+  }
+
+  async createSyncHistory(sync: InsertSyncHistory): Promise<SyncHistory> {
+    const [created] = await db.insert(syncHistory).values(sync).returning();
+    return created;
+  }
+
+  async updateSyncHistory(id: string, updates: Partial<SyncHistory>): Promise<SyncHistory | undefined> {
+    const [updated] = await db.update(syncHistory)
+      .set(updates)
+      .where(eq(syncHistory.id, id))
+      .returning();
+    return updated || undefined;
+  }
+
+  // Playground Sessions Management
+  async getPlaygroundSession(sessionId: string): Promise<PlaygroundSession | undefined> {
+    const [session] = await db.select().from(playgroundSessions)
+      .where(eq(playgroundSessions.id, sessionId));
+    return session || undefined;
+  }
+
+  async getPlaygroundSessionsByUser(userId: string): Promise<PlaygroundSession[]> {
+    return await db.select().from(playgroundSessions)
+      .where(eq(playgroundSessions.userId, userId))
+      .orderBy(desc(playgroundSessions.createdAt));
+  }
+
+  async getPlaygroundSessionsByAgent(agentId: string): Promise<PlaygroundSession[]> {
+    return await db.select().from(playgroundSessions)
+      .where(eq(playgroundSessions.agentId, agentId))
+      .orderBy(desc(playgroundSessions.createdAt));
+  }
+
+  async createPlaygroundSession(session: InsertPlaygroundSession): Promise<PlaygroundSession> {
+    const [created] = await db.insert(playgroundSessions).values(session).returning();
+    return created;
+  }
+
+  async updatePlaygroundSession(id: string, updates: Partial<PlaygroundSession>): Promise<PlaygroundSession | undefined> {
+    const [updated] = await db.update(playgroundSessions)
+      .set(updates)
+      .where(eq(playgroundSessions.id, id))
+      .returning();
+    return updated || undefined;
+  }
+
+  // Advanced Sync Operations
+  async syncAgent(agentId: string, userId: string): Promise<{
+    conversations: number;
+    transcripts: number;
+    analytics: number;
+    errors: string[];
+  }> {
+    // This would integrate with ElevenLabs API to sync all data
+    // For now, returning placeholder implementation
+    return {
+      conversations: 0,
+      transcripts: 0,
+      analytics: 0,
+      errors: []
+    };
   }
 }
 

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Download, Bot, Settings2, Search, AlertCircle, Trash2 } from "lucide-react";
+import { Download, Bot, Settings2, Search, AlertCircle, Trash2, RefreshCw, Clock } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import {
@@ -172,26 +172,27 @@ export default function Agents() {
     },
   });
 
-  const importHistoryMutation = useMutation({
+  const syncAgentMutation = useMutation({
     mutationFn: async ({ agentId, accountId }: { agentId: string; accountId?: string }) => {
-      const response = await apiRequest("POST", `/api/agents/${agentId}/import-conversations`, {
+      const response = await apiRequest("POST", `/api/agents/${agentId}/sync`, {
         accountId,
-        limit: 100,
+        syncType: 'full',
       });
       return response.json();
     },
     onSuccess: (data) => {
       toast({
-        title: "Import Complete",
-        description: `Imported ${data.stats.imported} conversations, ${data.stats.skipped} already existed`,
+        title: "Sync Complete",
+        description: `Synced ${data.conversations} conversations, ${data.transcripts} transcripts, ${data.analytics} analytics`,
       });
       queryClient.invalidateQueries({ queryKey: ["/api/calls"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/agents"] });
     },
     onError: (error: any) => {
       toast({
-        title: "Error",
-        description: error.message || "Failed to import conversation history",
+        title: "Sync Error",
+        description: error.message || "Failed to sync agent data",
         variant: "destructive",
       });
     },
@@ -275,8 +276,8 @@ export default function Agents() {
     });
   };
 
-  const handleImportHistory = (agent: Agent) => {
-    importHistoryMutation.mutate({
+  const handleSyncAgent = (agent: Agent) => {
+    syncAgentMutation.mutate({
       agentId: agent.id,
       accountId: agent.accountId || undefined,
     });
@@ -391,12 +392,12 @@ export default function Agents() {
                         variant="outline" 
                         size="sm" 
                         className="flex-1" 
-                        data-testid={`import-history-${agent.id}`}
-                        onClick={() => handleImportHistory(agent)}
-                        disabled={importHistoryMutation.isPending}
+                        data-testid={`sync-agent-${agent.id}`}
+                        onClick={() => handleSyncAgent(agent)}
+                        disabled={syncAgentMutation.isPending}
                       >
-                        <Download className="h-4 w-4 mr-2" />
-                        {importHistoryMutation.isPending ? "Importing..." : "Import History"}
+                        <RefreshCw className={`h-4 w-4 mr-2 ${syncAgentMutation.isPending ? 'animate-spin' : ''}`} />
+                        {syncAgentMutation.isPending ? "Syncing..." : "Sync"}
                       </Button>
                     )}
                   </div>

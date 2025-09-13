@@ -920,7 +920,140 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Import historical conversations from ElevenLabs
+  // Comprehensive agent sync endpoint
+  app.post("/api/agents/:agentId/sync", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { agentId } = req.params;
+      const { accountId, syncType = 'full' } = req.body;
+      const userId = req.user!.id;
+      
+      // Verify the agent exists and user has access
+      const agent = await storage.getAgent(userId, agentId);
+      if (!agent) {
+        return res.status(404).json({ message: "Agent not found" });
+      }
+      
+      if (agent.platform !== 'elevenlabs') {
+        return res.status(400).json({ 
+          message: "Sync is currently only available for ElevenLabs agents" 
+        });
+      }
+      
+      // Create sync history record
+      const syncRecord = await storage.createSyncHistory({
+        agentId,
+        syncType: syncType as 'full' | 'incremental',
+        itemsSynced: 0,
+        status: 'in_progress',
+        errorMessage: null,
+        completedAt: null,
+      });
+      
+      try {
+        // Fetch all conversations from ElevenLabs
+        let allConversations: any[] = [];
+        let cursor: string | undefined;
+        let totalFetched = 0;
+        const maxLimit = 500; // Sync more data
+        
+        // Get the last sync time for incremental sync
+        let startTime: number | undefined;
+        if (syncType === 'incremental') {
+          const lastSync = await storage.getLatestSync(agentId);
+          if (lastSync?.completedAt) {
+            startTime = lastSync.completedAt.getTime();
+          }
+        }
+        
+        // Fetch conversations
+        do {
+          const result = await elevenLabsIntegration.fetchConversations(
+            agent.externalId!,
+            accountId || agent.accountId || undefined,
+            {
+              startTime,
+              limit: Math.min(100, maxLimit - totalFetched),
+              cursor
+            }
+          );
+          
+          allConversations = [...allConversations, ...result.conversations];
+          cursor = result.cursor;
+          totalFetched += result.conversations.length;
+          
+        } while (cursor && totalFetched < maxLimit);
+        
+        // Fetch detailed conversation data with transcripts and analysis
+        const detailedConversations = await Promise.all(
+          allConversations.map(async (conv) => {
+            try {
+              const details = await elevenLabsIntegration.fetchConversationDetails(
+                conv.conversation_id,
+                accountId || agent.accountId || undefined
+              );
+              return details || conv;
+            } catch (error) {
+              console.error(`Failed to fetch details for conversation ${conv.conversation_id}:`, error);
+              return conv;
+            }
+          })
+        );
+        
+        // Import conversations into the database
+        const importResults = await storage.bulkImportConversations(
+          agentId,
+          detailedConversations
+        );
+        
+        // Update agent's metadata with last sync info
+        await storage.updateAgent(agentId, {
+          metadata: {
+            ...agent.metadata,
+            lastSyncedAt: new Date().toISOString(),
+            totalConversations: (agent.metadata?.totalConversations || 0) + importResults.imported,
+          }
+        });
+        
+        // Update sync history record
+        await storage.updateSyncHistory(syncRecord.id, {
+          status: 'completed',
+          itemsSynced: importResults.imported,
+          completedAt: new Date(),
+        });
+        
+        res.json({
+          message: "Sync completed successfully",
+          conversations: importResults.imported,
+          transcripts: importResults.imported, // Each conversation includes transcript
+          analytics: importResults.imported, // Each conversation includes analysis
+          errors: [],
+          syncRecord: {
+            id: syncRecord.id,
+            type: syncType,
+            itemsSynced: importResults.imported,
+            skipped: importResults.skipped,
+            failed: importResults.failed,
+          }
+        });
+      } catch (error: any) {
+        // Update sync history with error
+        await storage.updateSyncHistory(syncRecord.id, {
+          status: 'failed',
+          errorMessage: error.message,
+          completedAt: new Date(),
+        });
+        throw error;
+      }
+    } catch (error: any) {
+      console.error('Error syncing agent:', error);
+      res.status(500).json({ 
+        message: "Failed to sync agent",
+        error: error.message 
+      });
+    }
+  });
+  
+  // Import historical conversations from ElevenLabs (legacy endpoint, kept for compatibility)
   app.post("/api/agents/:agentId/import-conversations", requireAuth, async (req: Request, res: Response) => {
     try {
       const { agentId } = req.params;
