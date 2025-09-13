@@ -4,10 +4,19 @@ import { storage } from "./storage";
 import { insertUserSchema, insertAgentSchema, insertCallSchema } from "@shared/schema";
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // MOCK AUTH: For demo purposes, we'll use a mock user ID
+  // In production, this would come from authentication middleware
+  const getMockUserId = async () => {
+    // For demo: use alice.johnson (admin) or bob.wilson (regular user)
+    const mockUser = await storage.getUserByUsername("alice.johnson");
+    return mockUser?.id || "mock-user-id";
+  };
+
   // Dashboard routes
   app.get("/api/dashboard/stats", async (req, res) => {
     try {
-      const stats = await storage.getDashboardStats();
+      const userId = await getMockUserId();
+      const stats = await storage.getDashboardStats(userId);
       res.json(stats);
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch dashboard stats" });
@@ -63,10 +72,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Agent routes
+  // Agent routes - WITH DATA ISOLATION
   app.get("/api/agents", async (req, res) => {
     try {
-      const agents = await storage.getAllAgents();
+      const userId = await getMockUserId();
+      const agents = await storage.getAllAgents(userId);
       res.json(agents);
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch agents" });
@@ -75,9 +85,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/agents/:id", async (req, res) => {
     try {
-      const agent = await storage.getAgent(req.params.id);
+      const userId = await getMockUserId();
+      const agent = await storage.getAgent(userId, req.params.id);
       if (!agent) {
-        return res.status(404).json({ message: "Agent not found" });
+        return res.status(404).json({ message: "Agent not found or access denied" });
       }
       res.json(agent);
     } catch (error) {
@@ -95,13 +106,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Call routes
+  // Call routes - WITH DATA ISOLATION
   app.get("/api/calls", async (req, res) => {
     try {
-      const calls = await storage.getAllCalls();
+      const userId = await getMockUserId();
+      const calls = await storage.getAllCalls(userId);
       
-      // Get agents to include in response
-      const agents = await storage.getAllAgents();
+      // Get agents to include in response (only the ones user has access to)
+      const agents = await storage.getAllAgents(userId);
       const agentsMap = new Map(agents.map(agent => [agent.id, agent]));
       
       const callsWithAgents = calls.map(call => ({
@@ -117,16 +129,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/calls/:id", async (req, res) => {
     try {
-      const call = await storage.getCall(req.params.id);
+      const userId = await getMockUserId();
+      const call = await storage.getCall(userId, req.params.id);
       if (!call) {
-        return res.status(404).json({ message: "Call not found" });
+        return res.status(404).json({ message: "Call not found or access denied" });
       }
 
-      // Get agent information
-      const agent = await storage.getAgent(call.agentId);
+      // Get agent information (with user's access check)
+      const agent = await storage.getAgent(userId, call.agentId);
       
-      // Get performance metrics
-      const metrics = await storage.getPerformanceMetricsByCall(call.id);
+      // Get performance metrics (filtered for user's access)
+      const metrics = await storage.getPerformanceMetricsByCall(userId, call.id);
       
       res.json({
         ...call,
@@ -148,20 +161,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // LiveKit room routes
+  // LiveKit room routes - WITH DATA ISOLATION
   app.get("/api/livekit/rooms", async (req, res) => {
     try {
-      const rooms = await storage.getAllLiveKitRooms();
+      const userId = await getMockUserId();
+      const rooms = await storage.getAllLiveKitRooms(userId);
       res.json(rooms);
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch LiveKit rooms" });
     }
   });
 
-  // Performance metrics routes
+  // Performance metrics routes - WITH DATA ISOLATION
   app.get("/api/metrics/agent/:agentId", async (req, res) => {
     try {
-      const metrics = await storage.getPerformanceMetricsByAgent(req.params.agentId);
+      const userId = await getMockUserId();
+      const metrics = await storage.getPerformanceMetricsByAgent(userId, req.params.agentId);
       res.json(metrics);
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch performance metrics" });

@@ -8,7 +8,7 @@ export const users = pgTable("users", {
   username: text("username").notNull().unique(),
   email: text("email").notNull().unique(),
   password: text("password").notNull(),
-  role: varchar("role", { enum: ["admin", "supervisor", "analyst", "viewer"] }).notNull().default("viewer"),
+  role: varchar("role", { enum: ["admin", "user"] }).notNull().default("user"),
   isActive: boolean("is_active").notNull().default(true),
   lastActive: timestamp("last_active"),
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
@@ -61,6 +61,18 @@ export const liveKitRooms = pgTable("livekit_rooms", {
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
 });
 
+// User-Agent assignments for multi-tenant access control
+export const userAgents = pgTable("user_agents", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  agentId: varchar("agent_id").references(() => agents.id).notNull(),
+  assignedAt: timestamp("assigned_at").notNull().default(sql`now()`),
+}, (table) => {
+  return {
+    uniqueUserAgent: sql`UNIQUE(user_id, agent_id)`,
+  };
+});
+
 // Insert schemas
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
@@ -87,6 +99,11 @@ export const insertLiveKitRoomSchema = createInsertSchema(liveKitRooms).omit({
   createdAt: true,
 });
 
+export const insertUserAgentSchema = createInsertSchema(userAgents).omit({
+  id: true,
+  assignedAt: true,
+});
+
 // Types
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -102,3 +119,6 @@ export type InsertPerformanceMetric = z.infer<typeof insertPerformanceMetricSche
 
 export type LiveKitRoom = typeof liveKitRooms.$inferSelect;
 export type InsertLiveKitRoom = z.infer<typeof insertLiveKitRoomSchema>;
+
+export type UserAgent = typeof userAgents.$inferSelect;
+export type InsertUserAgent = z.infer<typeof insertUserAgentSchema>;

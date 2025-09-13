@@ -3,7 +3,8 @@ import {
   type Agent, type InsertAgent,
   type Call, type InsertCall,
   type PerformanceMetric, type InsertPerformanceMetric,
-  type LiveKitRoom, type InsertLiveKitRoom
+  type LiveKitRoom, type InsertLiveKitRoom,
+  type UserAgent, type InsertUserAgent
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 
@@ -16,33 +17,40 @@ export interface IStorage {
   updateUser(id: string, updates: Partial<User>): Promise<User | undefined>;
   getAllUsers(): Promise<User[]>;
 
-  // Agents
-  getAgent(id: string): Promise<Agent | undefined>;
-  getAllAgents(): Promise<Agent[]>;
+  // User-Agent Assignments (Multi-tenancy)
+  getAssignedAgentIds(userId: string): Promise<string[]>;
+  assignAgents(userId: string, agentIds: string[]): Promise<void>;
+  removeAgentAssignment(userId: string, agentId: string): Promise<void>;
+  getUserAgents(userId: string): Promise<Agent[]>;
+
+  // Agents - REQUIRES USER ID FOR DATA ISOLATION
+  getAgent(userId: string, agentId: string): Promise<Agent | undefined>;
+  getAllAgents(userId: string): Promise<Agent[]>;
   createAgent(agent: InsertAgent): Promise<Agent>;
   updateAgent(id: string, updates: Partial<Agent>): Promise<Agent | undefined>;
 
-  // Calls
-  getCall(id: string): Promise<Call | undefined>;
-  getAllCalls(): Promise<Call[]>;
-  getCallsByAgent(agentId: string): Promise<Call[]>;
+  // Calls - REQUIRES USER ID FOR DATA ISOLATION
+  getCall(userId: string, callId: string): Promise<Call | undefined>;
+  getAllCalls(userId: string): Promise<Call[]>;
+  getCallsByAgent(userId: string, agentId: string): Promise<Call[]>;
   createCall(call: InsertCall): Promise<Call>;
   updateCall(id: string, updates: Partial<Call>): Promise<Call | undefined>;
 
-  // Performance Metrics
-  getPerformanceMetric(id: string): Promise<PerformanceMetric | undefined>;
-  getPerformanceMetricsByCall(callId: string): Promise<PerformanceMetric[]>;
-  getPerformanceMetricsByAgent(agentId: string): Promise<PerformanceMetric[]>;
+  // Performance Metrics - REQUIRES USER ID FOR DATA ISOLATION
+  getPerformanceMetric(userId: string, metricId: string): Promise<PerformanceMetric | undefined>;
+  getPerformanceMetricsByCall(userId: string, callId: string): Promise<PerformanceMetric[]>;
+  getPerformanceMetricsByAgent(userId: string, agentId: string): Promise<PerformanceMetric[]>;
+  getPerformanceMetrics(userId: string): Promise<PerformanceMetric[]>;
   createPerformanceMetric(metric: InsertPerformanceMetric): Promise<PerformanceMetric>;
 
-  // LiveKit Rooms
-  getLiveKitRoom(id: string): Promise<LiveKitRoom | undefined>;
-  getAllLiveKitRooms(): Promise<LiveKitRoom[]>;
+  // LiveKit Rooms - REQUIRES USER ID FOR DATA ISOLATION
+  getLiveKitRoom(userId: string, roomId: string): Promise<LiveKitRoom | undefined>;
+  getAllLiveKitRooms(userId: string): Promise<LiveKitRoom[]>;
   createLiveKitRoom(room: InsertLiveKitRoom): Promise<LiveKitRoom>;
   updateLiveKitRoom(id: string, updates: Partial<LiveKitRoom>): Promise<LiveKitRoom | undefined>;
 
-  // Dashboard data
-  getDashboardStats(): Promise<{
+  // Dashboard data - REQUIRES USER ID FOR DATA ISOLATION
+  getDashboardStats(userId: string): Promise<{
     totalCalls: number;
     avgHandleTime: string;
     elevenLabsLatencyP95: number;
@@ -58,13 +66,14 @@ export class MemStorage implements IStorage {
   private calls: Map<string, Call> = new Map();
   private performanceMetrics: Map<string, PerformanceMetric> = new Map();
   private liveKitRooms: Map<string, LiveKitRoom> = new Map();
+  private userAgents: Map<string, UserAgent> = new Map();
 
   constructor() {
     this.seedData();
   }
 
   private seedData() {
-    // Seed users
+    // Seed users - 2 admins and 3 regular users
     const users = [
       {
         id: randomUUID(),
@@ -78,10 +87,20 @@ export class MemStorage implements IStorage {
       },
       {
         id: randomUUID(),
-        username: "bob.smith",
+        username: "admin.smith",
+        email: "admin.smith@company.com",
+        password: "hashedPassword",
+        role: "admin" as const,
+        isActive: true,
+        lastActive: new Date(Date.now() - 1 * 60 * 60 * 1000), // 1 hour ago
+        createdAt: new Date(),
+      },
+      {
+        id: randomUUID(),
+        username: "bob.wilson",
         email: "bob@company.com",
         password: "hashedPassword",
-        role: "analyst" as const,
+        role: "user" as const,
         isActive: true,
         lastActive: new Date(Date.now() - 24 * 60 * 60 * 1000), // 1 day ago
         createdAt: new Date(),
@@ -91,9 +110,19 @@ export class MemStorage implements IStorage {
         username: "sarah.connors",
         email: "sarah@company.com",
         password: "hashedPassword",
-        role: "supervisor" as const,
+        role: "user" as const,
         isActive: true,
         lastActive: new Date(Date.now() - 30 * 60 * 1000), // 30 minutes ago
+        createdAt: new Date(),
+      },
+      {
+        id: randomUUID(),
+        username: "john.doe",
+        email: "john@company.com",
+        password: "hashedPassword",
+        role: "user" as const,
+        isActive: true,
+        lastActive: new Date(Date.now() - 4 * 60 * 60 * 1000), // 4 hours ago
         createdAt: new Date(),
       },
     ];
@@ -126,9 +155,68 @@ export class MemStorage implements IStorage {
         isActive: false,
         createdAt: new Date(),
       },
+      {
+        id: randomUUID(),
+        name: "Customer Service Bot",
+        platform: "livekit" as const,
+        description: "General customer service inquiries",
+        isActive: true,
+        createdAt: new Date(),
+      },
     ];
 
     agents.forEach(agent => this.agents.set(agent.id, agent));
+
+    // Create user-agent assignments
+    const userList = Array.from(this.users.values());
+    const agentList = Array.from(this.agents.values());
+    
+    // Admins don't need assignments - they see everything
+    // Regular users get different agent assignments
+    const bobId = userList.find(u => u.username === "bob.wilson")?.id!;
+    const sarahId = userList.find(u => u.username === "sarah.connors")?.id!;
+    const johnId = userList.find(u => u.username === "john.doe")?.id!;
+    
+    const salesBotId = agentList.find(a => a.name === "SalesBot")?.id!;
+    const supportRouterId = agentList.find(a => a.name === "SupportRouter")?.id!;
+    const ivrAssistantId = agentList.find(a => a.name === "IVR Assistant")?.id!;
+    const customerServiceId = agentList.find(a => a.name === "Customer Service Bot")?.id!;
+
+    // Bob gets SalesBot and IVR Assistant
+    this.userAgents.set(randomUUID(), {
+      id: randomUUID(),
+      userId: bobId,
+      agentId: salesBotId,
+      assignedAt: new Date(),
+    });
+    this.userAgents.set(randomUUID(), {
+      id: randomUUID(),
+      userId: bobId,
+      agentId: ivrAssistantId,
+      assignedAt: new Date(),
+    });
+
+    // Sarah gets SupportRouter and Customer Service Bot
+    this.userAgents.set(randomUUID(), {
+      id: randomUUID(),
+      userId: sarahId,
+      agentId: supportRouterId,
+      assignedAt: new Date(),
+    });
+    this.userAgents.set(randomUUID(), {
+      id: randomUUID(),
+      userId: sarahId,
+      agentId: customerServiceId,
+      assignedAt: new Date(),
+    });
+
+    // John gets only Customer Service Bot
+    this.userAgents.set(randomUUID(), {
+      id: randomUUID(),
+      userId: johnId,
+      agentId: customerServiceId,
+      assignedAt: new Date(),
+    });
 
     // Seed LiveKit rooms
     const rooms = [
@@ -153,9 +241,6 @@ export class MemStorage implements IStorage {
     rooms.forEach(room => this.liveKitRooms.set(room.id, room));
 
     // Seed calls
-    const salesBotId = Array.from(this.agents.values()).find(a => a.name === "SalesBot")?.id!;
-    const supportRouterId = Array.from(this.agents.values()).find(a => a.name === "SupportRouter")?.id!;
-
     const calls = [
       {
         id: "C-1055",
@@ -211,6 +296,33 @@ export class MemStorage implements IStorage {
         metadata: { roomId: "RM_D4E5F6" },
         createdAt: new Date(),
       },
+      {
+        id: "C-1057",
+        agentId: customerServiceId,
+        startTime: new Date(Date.now() - 3 * 60 * 60 * 1000),
+        endTime: new Date(Date.now() - 3 * 60 * 60 * 1000 + 3 * 60 * 1000),
+        duration: 180, // 3m
+        sentiment: "neutral" as const,
+        outcome: "Resolved",
+        recordingUrl: "/recordings/C-1057.mp3",
+        transcript: [
+          { timestamp: "00:01", speaker: "agent", text: "Hello, customer service, how may I assist you?" },
+          { timestamp: "00:07", speaker: "user", text: "I need to update my billing information." },
+          { timestamp: "00:14", speaker: "agent", text: "I can help you with that. Let me guide you through the process." },
+        ],
+        analysis: {
+          summary: "Customer requested billing information update, successfully completed.",
+          topics: ["Billing", "Account Management"],
+          latencyWaterfall: {
+            speechToText: 70,
+            agentLogic: 50,
+            elevenLabsTTS: 0,
+            liveKitTransport: 40,
+          }
+        },
+        metadata: { roomId: "RM_D4E5F6" },
+        createdAt: new Date(),
+      },
     ];
 
     calls.forEach(call => this.calls.set(call.id, call));
@@ -252,7 +364,7 @@ export class MemStorage implements IStorage {
       ...insertUser,
       id: randomUUID(),
       createdAt: new Date(),
-      role: insertUser.role || "viewer",
+      role: insertUser.role || "user",
       isActive: insertUser.isActive ?? true,
       lastActive: insertUser.lastActive || null,
     };
@@ -273,13 +385,84 @@ export class MemStorage implements IStorage {
     return Array.from(this.users.values());
   }
 
-  // Agent methods
-  async getAgent(id: string): Promise<Agent | undefined> {
-    return this.agents.get(id);
+  // User-Agent Assignment methods
+  async getAssignedAgentIds(userId: string): Promise<string[]> {
+    const user = await this.getUser(userId);
+    if (!user) return [];
+    
+    // Admins see all agents
+    if (user.role === 'admin') {
+      return Array.from(this.agents.keys());
+    }
+    
+    // Regular users see only assigned agents
+    return Array.from(this.userAgents.values())
+      .filter(ua => ua.userId === userId)
+      .map(ua => ua.agentId);
   }
 
-  async getAllAgents(): Promise<Agent[]> {
-    return Array.from(this.agents.values());
+  async assignAgents(userId: string, agentIds: string[]): Promise<void> {
+    const user = await this.getUser(userId);
+    if (!user) throw new Error('User not found');
+    
+    // Validate that all agent IDs exist
+    for (const agentId of agentIds) {
+      const agent = this.agents.get(agentId);
+      if (!agent) {
+        throw new Error(`Agent with ID ${agentId} not found`);
+      }
+    }
+    
+    // Remove existing assignments for this user
+    const existingAssignments = Array.from(this.userAgents.entries())
+      .filter(([_, ua]) => ua.userId === userId);
+    existingAssignments.forEach(([key, _]) => this.userAgents.delete(key));
+    
+    // Create new assignments
+    agentIds.forEach(agentId => {
+      const id = randomUUID();
+      this.userAgents.set(id, {
+        id,
+        userId,
+        agentId,
+        assignedAt: new Date(),
+      });
+    });
+  }
+
+  async removeAgentAssignment(userId: string, agentId: string): Promise<void> {
+    const assignment = Array.from(this.userAgents.entries())
+      .find(([_, ua]) => ua.userId === userId && ua.agentId === agentId);
+    
+    if (assignment) {
+      this.userAgents.delete(assignment[0]);
+    }
+  }
+
+  async getUserAgents(userId: string): Promise<Agent[]> {
+    const agentIds = await this.getAssignedAgentIds(userId);
+    return Array.from(this.agents.values())
+      .filter(agent => agentIds.includes(agent.id));
+  }
+
+  // Agent methods - WITH DATA ISOLATION
+  async getAgent(userId: string, agentId: string): Promise<Agent | undefined> {
+    const allowedAgentIds = await this.getAssignedAgentIds(userId);
+    
+    // Check if user has access to this agent
+    if (!allowedAgentIds.includes(agentId)) {
+      return undefined;
+    }
+    
+    return this.agents.get(agentId);
+  }
+
+  async getAllAgents(userId: string): Promise<Agent[]> {
+    const allowedAgentIds = await this.getAssignedAgentIds(userId);
+    const agents = Array.from(this.agents.values());
+    
+    // Filter agents based on user's access
+    return agents.filter(agent => allowedAgentIds.includes(agent.id));
   }
 
   async createAgent(insertAgent: InsertAgent): Promise<Agent> {
@@ -303,16 +486,35 @@ export class MemStorage implements IStorage {
     return updatedAgent;
   }
 
-  // Call methods
-  async getCall(id: string): Promise<Call | undefined> {
-    return this.calls.get(id);
+  // Call methods - WITH DATA ISOLATION
+  async getCall(userId: string, callId: string): Promise<Call | undefined> {
+    const allowedAgentIds = await this.getAssignedAgentIds(userId);
+    const call = this.calls.get(callId);
+    
+    // Check if call belongs to an agent the user has access to
+    if (!call || !allowedAgentIds.includes(call.agentId)) {
+      return undefined;
+    }
+    
+    return call;
   }
 
-  async getAllCalls(): Promise<Call[]> {
-    return Array.from(this.calls.values());
+  async getAllCalls(userId: string): Promise<Call[]> {
+    const allowedAgentIds = await this.getAssignedAgentIds(userId);
+    const calls = Array.from(this.calls.values());
+    
+    // Filter calls based on user's assigned agents
+    return calls.filter(call => allowedAgentIds.includes(call.agentId));
   }
 
-  async getCallsByAgent(agentId: string): Promise<Call[]> {
+  async getCallsByAgent(userId: string, agentId: string): Promise<Call[]> {
+    const allowedAgentIds = await this.getAssignedAgentIds(userId);
+    
+    // Check if user has access to this agent
+    if (!allowedAgentIds.includes(agentId)) {
+      return [];
+    }
+    
     return Array.from(this.calls.values()).filter(call => call.agentId === agentId);
   }
 
@@ -343,17 +545,49 @@ export class MemStorage implements IStorage {
     return updatedCall;
   }
 
-  // Performance metric methods
-  async getPerformanceMetric(id: string): Promise<PerformanceMetric | undefined> {
-    return this.performanceMetrics.get(id);
+  // Performance metric methods - WITH DATA ISOLATION
+  async getPerformanceMetric(userId: string, metricId: string): Promise<PerformanceMetric | undefined> {
+    const allowedAgentIds = await this.getAssignedAgentIds(userId);
+    const metric = this.performanceMetrics.get(metricId);
+    
+    // Check if metric belongs to an agent the user has access to
+    if (!metric || !allowedAgentIds.includes(metric.agentId)) {
+      return undefined;
+    }
+    
+    return metric;
   }
 
-  async getPerformanceMetricsByCall(callId: string): Promise<PerformanceMetric[]> {
-    return Array.from(this.performanceMetrics.values()).filter(metric => metric.callId === callId);
+  async getPerformanceMetricsByCall(userId: string, callId: string): Promise<PerformanceMetric[]> {
+    const allowedAgentIds = await this.getAssignedAgentIds(userId);
+    
+    // First verify the call belongs to an allowed agent
+    const call = await this.getCall(userId, callId);
+    if (!call) {
+      return [];
+    }
+    
+    return Array.from(this.performanceMetrics.values())
+      .filter(metric => metric.callId === callId && allowedAgentIds.includes(metric.agentId));
   }
 
-  async getPerformanceMetricsByAgent(agentId: string): Promise<PerformanceMetric[]> {
+  async getPerformanceMetricsByAgent(userId: string, agentId: string): Promise<PerformanceMetric[]> {
+    const allowedAgentIds = await this.getAssignedAgentIds(userId);
+    
+    // Check if user has access to this agent
+    if (!allowedAgentIds.includes(agentId)) {
+      return [];
+    }
+    
     return Array.from(this.performanceMetrics.values()).filter(metric => metric.agentId === agentId);
+  }
+
+  async getPerformanceMetrics(userId: string): Promise<PerformanceMetric[]> {
+    const allowedAgentIds = await this.getAssignedAgentIds(userId);
+    const metrics = Array.from(this.performanceMetrics.values());
+    
+    // Filter metrics based on user's assigned agents
+    return metrics.filter(metric => allowedAgentIds.includes(metric.agentId));
   }
 
   async createPerformanceMetric(insertMetric: InsertPerformanceMetric): Promise<PerformanceMetric> {
@@ -373,13 +607,39 @@ export class MemStorage implements IStorage {
     return metric;
   }
 
-  // LiveKit room methods
-  async getLiveKitRoom(id: string): Promise<LiveKitRoom | undefined> {
-    return this.liveKitRooms.get(id);
+  // LiveKit room methods - WITH DATA ISOLATION
+  async getLiveKitRoom(userId: string, roomId: string): Promise<LiveKitRoom | undefined> {
+    const allowedAgentIds = await this.getAssignedAgentIds(userId);
+    const room = this.liveKitRooms.get(roomId);
+    
+    if (!room) {
+      return undefined;
+    }
+    
+    // Check if any calls in this room belong to allowed agents
+    const roomCalls = Array.from(this.calls.values())
+      .filter(call => call.metadata && (call.metadata as any).roomId === room.roomId);
+    
+    const hasAccess = roomCalls.some(call => allowedAgentIds.includes(call.agentId));
+    
+    if (!hasAccess) {
+      return undefined;
+    }
+    
+    return room;
   }
 
-  async getAllLiveKitRooms(): Promise<LiveKitRoom[]> {
-    return Array.from(this.liveKitRooms.values());
+  async getAllLiveKitRooms(userId: string): Promise<LiveKitRoom[]> {
+    const allowedAgentIds = await this.getAssignedAgentIds(userId);
+    const rooms = Array.from(this.liveKitRooms.values());
+    
+    // Filter rooms based on whether user has access to calls in those rooms
+    return rooms.filter(room => {
+      const roomCalls = Array.from(this.calls.values())
+        .filter(call => call.metadata && (call.metadata as any).roomId === room.roomId);
+      
+      return roomCalls.some(call => allowedAgentIds.includes(call.agentId));
+    });
   }
 
   async createLiveKitRoom(insertRoom: InsertLiveKitRoom): Promise<LiveKitRoom> {
@@ -403,11 +663,29 @@ export class MemStorage implements IStorage {
     return updatedRoom;
   }
 
-  // Dashboard methods
-  async getDashboardStats() {
-    const calls = Array.from(this.calls.values());
-    const activeRooms = Array.from(this.liveKitRooms.values()).filter(room => room.isActive);
-    const metrics = Array.from(this.performanceMetrics.values());
+  // Dashboard methods - WITH DATA ISOLATION
+  async getDashboardStats(userId: string) {
+    const allowedAgentIds = await this.getAssignedAgentIds(userId);
+    
+    // Get filtered calls based on user's assigned agents
+    const allCalls = Array.from(this.calls.values());
+    const calls = allCalls.filter(call => allowedAgentIds.includes(call.agentId));
+    
+    // Get only rooms that have calls from allowed agents
+    const activeRooms = Array.from(this.liveKitRooms.values()).filter(room => {
+      if (!room.isActive) return false;
+      
+      // Check if any calls in this room belong to allowed agents
+      const roomCalls = allCalls.filter(call => 
+        call.metadata && (call.metadata as any).roomId === room.roomId
+      );
+      
+      return roomCalls.some(call => allowedAgentIds.includes(call.agentId));
+    });
+    
+    // Get filtered metrics based on user's assigned agents
+    const allMetrics = Array.from(this.performanceMetrics.values());
+    const metrics = allMetrics.filter(m => allowedAgentIds.includes(m.agentId));
 
     const totalCalls = calls.length;
     const avgHandleTime = calls.length > 0 
@@ -425,14 +703,44 @@ export class MemStorage implements IStorage {
       ? elevenLabsLatencies[Math.floor(elevenLabsLatencies.length * 0.95)]
       : 0;
 
-    // Generate mock call volume data for the last 7 days
+    // Generate call volume data based on actual calls from allowed agents
     const callVolumeData = Array.from({ length: 7 }, (_, i) => {
       const date = new Date();
       date.setDate(date.getDate() - (6 - i));
+      const dayStart = new Date(date);
+      dayStart.setHours(0, 0, 0, 0);
+      const dayEnd = new Date(date);
+      dayEnd.setHours(23, 59, 59, 999);
+      
+      // Count actual calls from that day for allowed agents
+      const dayCalls = calls.filter(call => {
+        const callTime = call.startTime.getTime();
+        return callTime >= dayStart.getTime() && callTime <= dayEnd.getTime();
+      });
+      
+      // Count by platform (get agent platform)
+      let elevenLabsCount = 0;
+      let liveKitCount = 0;
+      
+      dayCalls.forEach(call => {
+        const agent = this.agents.get(call.agentId);
+        if (agent?.platform === 'elevenlabs') {
+          elevenLabsCount++;
+        } else if (agent?.platform === 'livekit') {
+          liveKitCount++;
+        }
+      });
+      
+      // If no data for that day, use small random values for demo
+      if (elevenLabsCount === 0 && liveKitCount === 0) {
+        elevenLabsCount = Math.floor(Math.random() * 10) + 5;
+        liveKitCount = Math.floor(Math.random() * 8) + 3;
+      }
+      
       return {
         time: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-        elevenlabs: Math.floor(Math.random() * 50) + 20,
-        livekit: Math.floor(Math.random() * 30) + 15,
+        elevenlabs: elevenLabsCount,
+        livekit: liveKitCount,
       };
     });
 
