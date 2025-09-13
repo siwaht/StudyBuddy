@@ -24,6 +24,8 @@ export default function AudioPlayer({ recordingUrl, duration, metadata, call, on
   const [currentTime, setCurrentTime] = useState(0);
   const [audioLoaded, setAudioLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [recordingStatus, setRecordingStatus] = useState<'checking' | 'available' | 'processing' | 'unavailable'>('checking');
+  const [actualRecordingUrl, setActualRecordingUrl] = useState<string | null>(recordingUrl || null);
 
   const formatTime = (seconds: number) => {
     const minutes = Math.floor(seconds / 60);
@@ -76,7 +78,74 @@ export default function AudioPlayer({ recordingUrl, duration, metadata, call, on
       audio.removeEventListener('error', handleError);
       audio.removeEventListener('ended', handleEnded);
     };
-  }, [recordingUrl]);
+  }, [actualRecordingUrl]);
+
+  // Check recording availability and poll if processing
+  useEffect(() => {
+    if (!call?.id || !call.id.startsWith('EL-')) {
+      setRecordingStatus('unavailable');
+      return;
+    }
+
+    let pollInterval: NodeJS.Timeout | null = null;
+    let pollCount = 0;
+    const maxPolls = 12; // Poll for up to 2 minutes (12 * 10 seconds)
+
+    const checkAvailability = async () => {
+      try {
+        const response = await fetch(`/api/calls/${call.id}/recording/availability`);
+        if (response.ok) {
+          const data = await response.json();
+          setRecordingStatus(data.status);
+          
+          if (data.status === 'available') {
+            // Set the recording URL when available
+            setActualRecordingUrl(`/api/calls/${call.id}/recording`);
+            if (pollInterval) {
+              clearInterval(pollInterval);
+            }
+          } else if (data.status === 'processing') {
+            // Continue polling if processing
+            pollCount++;
+            if (pollCount >= maxPolls) {
+              setRecordingStatus('unavailable');
+              if (pollInterval) {
+                clearInterval(pollInterval);
+              }
+            }
+          } else {
+            // Stop polling if unavailable
+            if (pollInterval) {
+              clearInterval(pollInterval);
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Failed to check recording availability:', err);
+        setRecordingStatus('unavailable');
+        if (pollInterval) {
+          clearInterval(pollInterval);
+        }
+      }
+    };
+
+    // Initial check
+    checkAvailability();
+
+    // If recording URL is not provided, poll for availability
+    if (!recordingUrl) {
+      pollInterval = setInterval(checkAvailability, 10000); // Poll every 10 seconds
+    } else {
+      setRecordingStatus('available');
+      setActualRecordingUrl(recordingUrl);
+    }
+
+    return () => {
+      if (pollInterval) {
+        clearInterval(pollInterval);
+      }
+    };
+  }, [call?.id, recordingUrl]);
 
   const handlePlayPause = async () => {
     const audio = audioRef.current;
@@ -111,10 +180,10 @@ export default function AudioPlayer({ recordingUrl, duration, metadata, call, on
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Audio Player */}
           <div className="space-y-4">
-            {recordingUrl && (
+            {actualRecordingUrl && (
               <audio
                 ref={audioRef}
-                src={recordingUrl}
+                src={actualRecordingUrl}
                 preload="metadata"
                 role="audio"
                 data-testid="audio-element"
@@ -127,7 +196,7 @@ export default function AudioPlayer({ recordingUrl, duration, metadata, call, on
                 size="lg"
                 className="w-12 h-12 rounded-full"
                 onClick={handlePlayPause}
-                disabled={!audioLoaded && !error && Boolean(recordingUrl)}
+                disabled={!audioLoaded && !error && Boolean(actualRecordingUrl)}
                 data-testid="button-play-pause"
                 aria-label={isPlaying ? "Pause audio" : "Play audio"}
               >
@@ -140,7 +209,7 @@ export default function AudioPlayer({ recordingUrl, duration, metadata, call, on
               <div className="flex-1">
                 {error ? (
                   <div className="text-sm text-red-500 mb-2">{error}</div>
-                ) : recordingUrl ? (
+                ) : actualRecordingUrl ? (
                   <>
                     <div className="relative h-10 bg-muted rounded mb-2" data-testid="audio-waveform">
                       <div 
@@ -154,6 +223,10 @@ export default function AudioPlayer({ recordingUrl, duration, metadata, call, on
                       <span data-testid="total-duration">/ {formatDuration(duration)}</span>
                     </div>
                   </>
+                ) : recordingStatus === 'processing' ? (
+                  <div className="text-sm text-muted-foreground mb-2">Recording is being processed...</div>
+                ) : recordingStatus === 'checking' ? (
+                  <div className="text-sm text-muted-foreground mb-2">Checking recording availability...</div>
                 ) : (
                   <div className="text-sm text-muted-foreground mb-2">No recording available</div>
                 )}

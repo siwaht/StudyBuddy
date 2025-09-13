@@ -76,7 +76,7 @@ class ElevenLabsService {
         {
           method: "GET",
           headers: {
-            "xi-api-key": this.apiKey,
+            "xi-api-key": apiKey,
           },
         }
       );
@@ -94,7 +94,7 @@ class ElevenLabsService {
   }
 
   // Fetch agent details
-  async getAgent(agentId: string): Promise<any> {
+  async getAgent(agentId: string, accountId?: string): Promise<any> {
     if (!this.apiKey) {
       return null;
     }
@@ -105,7 +105,7 @@ class ElevenLabsService {
         {
           method: "GET",
           headers: {
-            "xi-api-key": this.apiKey,
+            "xi-api-key": apiKey,
           },
         }
       );
@@ -122,7 +122,7 @@ class ElevenLabsService {
   }
 
   // List all agents
-  async listAgents(): Promise<any[]> {
+  async listAgents(accountId?: string): Promise<any[]> {
     if (!this.apiKey) {
       return [];
     }
@@ -133,7 +133,7 @@ class ElevenLabsService {
         {
           method: "GET",
           headers: {
-            "xi-api-key": this.apiKey,
+            "xi-api-key": apiKey,
           },
         }
       );
@@ -151,7 +151,7 @@ class ElevenLabsService {
   }
 
   // Get conversation details
-  async getConversation(conversationId: string): Promise<any> {
+  async getConversation(conversationId: string, accountId?: string): Promise<any> {
     if (!this.apiKey) {
       return null;
     }
@@ -162,7 +162,7 @@ class ElevenLabsService {
         {
           method: "GET",
           headers: {
-            "xi-api-key": this.apiKey,
+            "xi-api-key": apiKey,
           },
         }
       );
@@ -179,7 +179,7 @@ class ElevenLabsService {
   }
 
   // List conversations
-  async listConversations(agentId?: string, limit: number = 100): Promise<any[]> {
+  async listConversations(agentId?: string, limit: number = 100, accountId?: string): Promise<any[]> {
     if (!this.apiKey) {
       return [];
     }
@@ -193,7 +193,7 @@ class ElevenLabsService {
       const response = await fetch(url, {
         method: "GET",
         headers: {
-          "xi-api-key": this.apiKey,
+          "xi-api-key": apiKey,
         },
       });
 
@@ -476,7 +476,7 @@ class ElevenLabsService {
       const response = await fetch(url, {
         method: "GET",
         headers: {
-          "xi-api-key": this.apiKey,
+          "xi-api-key": apiKey,
         },
       });
 

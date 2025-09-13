@@ -611,8 +611,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let recordingUrl = call.recordingUrl;
       if (call.id.startsWith('EL-') && !recordingUrl && elevenlabsService.isConfigured()) {
         const conversationId = call.id.replace('EL-', '');
+        
+        // Get the account ID for this agent
+        const accounts = await storage.getAccountsByService('elevenlabs');
+        const account = accounts.find((a: any) => a.isActive);
+        const accountId = account?.id;
+        
         // Check if audio is actually available before providing the URL
-        const hasAudio = await elevenlabsService.hasConversationAudio(conversationId);
+        const hasAudio = await elevenlabsService.hasConversationAudio(conversationId, accountId);
         if (hasAudio) {
           // Use the full call ID as the recording endpoint parameter
           recordingUrl = `/api/calls/${call.id}/recording`;
@@ -649,15 +655,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const conversationId = call.id.replace('EL-', '');
       
+      // Get the account ID for this agent
+      const agent = await storage.getAgent(req.user!.id, call.agentId);
+      const accounts = await storage.getAccountsByService('elevenlabs');
+      const account = accounts.find((a: any) => a.isActive);
+      const accountId = account?.id;
+      
       // First check if audio is available
-      const hasAudio = await elevenlabsService.hasConversationAudio(conversationId);
+      const hasAudio = await elevenlabsService.hasConversationAudio(conversationId, accountId);
       if (!hasAudio) {
         console.log(`No audio available for conversation ${conversationId}`);
         return res.status(404).json({ message: "Audio recording not available for this conversation. The conversation may not have been recorded or audio may still be processing." });
       }
       
       // Fetch the audio from ElevenLabs
-      const audioBuffer = await elevenlabsService.getConversationAudio(conversationId);
+      const audioBuffer = await elevenlabsService.getConversationAudio(conversationId, accountId);
       
       if (!audioBuffer) {
         return res.status(404).json({ message: "Recording not found or not yet available. Please try again later." });
@@ -674,6 +686,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Error fetching recording:', error);
       res.status(500).json({ message: "Failed to fetch recording" });
+    }
+  });
+
+  // Recording availability endpoint for polling
+  app.get("/api/calls/:id/recording/availability", requireAuth, async (req: Request, res: Response) => {
+    try {
+      // Verify user has access to this call
+      const call = await storage.getCall(req.user!.id, req.params.id);
+      if (!call) {
+        return res.status(404).json({ message: "Call not found or access denied" });
+      }
+
+      // Only handle ElevenLabs recordings
+      if (!call.id.startsWith('EL-')) {
+        return res.json({ status: 'unavailable', message: 'Not an ElevenLabs call' });
+      }
+
+      const conversationId = call.id.replace('EL-', '');
+      
+      // Get the account ID for this agent
+      const agent = await storage.getAgent(req.user!.id, call.agentId);
+      const accounts = await storage.getAccountsByService('elevenlabs');
+      const account = accounts.find((a: any) => a.isActive);
+      const accountId = account?.id;
+      
+      // Check if audio is available
+      const hasAudio = await elevenlabsService.hasConversationAudio(conversationId, accountId);
+      
+      if (hasAudio) {
+        return res.json({ status: 'available', message: 'Recording is available' });
+      }
+      
+      // Check if conversation ended recently (within last 5 minutes)
+      const endTime = call.endTime ? new Date(call.endTime).getTime() : 0;
+      const now = Date.now();
+      const fiveMinutes = 5 * 60 * 1000;
+      
+      if (endTime && (now - endTime) < fiveMinutes) {
+        return res.json({ status: 'processing', message: 'Recording is being processed' });
+      }
+      
+      return res.json({ status: 'unavailable', message: 'Recording not available' });
+    } catch (error) {
+      console.error('Error checking recording availability:', error);
+      res.status(500).json({ status: 'error', message: 'Failed to check availability' });
     }
   });
 
