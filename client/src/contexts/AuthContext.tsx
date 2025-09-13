@@ -34,6 +34,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     queryKey: ["/api/auth/me"],
     retry: false,
     enabled: true,
+    queryFn: async () => {
+      try {
+        const res = await fetch("/api/auth/me", {
+          credentials: "include",
+        });
+        
+        if (res.status === 401) {
+          // User is not authenticated, return null
+          return null;
+        }
+        
+        if (!res.ok) {
+          throw new Error(`Failed to fetch user: ${res.status}`);
+        }
+        
+        return await res.json();
+      } catch (error) {
+        console.error("Auth check failed:", error);
+        return null;
+      }
+    },
   });
 
   useEffect(() => {
