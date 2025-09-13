@@ -40,22 +40,22 @@ interface UsersTableProps {
 const getRoleColor = (role: string) => {
   switch (role) {
     case "admin":
-      return "bg-red-100 text-red-800 hover:bg-red-100";
+      return "bg-gradient-to-r from-red-500/10 to-pink-500/10 text-red-700 border border-red-200/30 hover:from-red-500/20 hover:to-pink-500/20";
     case "supervisor":
-      return "bg-green-100 text-green-800 hover:bg-green-100";
+      return "bg-gradient-to-r from-emerald-500/10 to-teal-500/10 text-emerald-700 border border-emerald-200/30 hover:from-emerald-500/20 hover:to-teal-500/20";
     case "analyst":
-      return "bg-blue-100 text-blue-800 hover:bg-blue-100";
+      return "bg-gradient-to-r from-blue-500/10 to-cyan-500/10 text-blue-700 border border-blue-200/30 hover:from-blue-500/20 hover:to-cyan-500/20";
     case "viewer":
-      return "bg-gray-100 text-gray-800 hover:bg-gray-100";
+      return "bg-gradient-to-r from-gray-500/10 to-slate-500/10 text-gray-700 border border-gray-200/30 hover:from-gray-500/20 hover:to-slate-500/20";
     default:
-      return "bg-gray-100 text-gray-800 hover:bg-gray-100";
+      return "bg-gradient-to-r from-gray-500/10 to-slate-500/10 text-gray-700 border border-gray-200/30 hover:from-gray-500/20 hover:to-slate-500/20";
   }
 };
 
 const getStatusColor = (isActive: boolean) => {
   return isActive 
-    ? "bg-emerald-100 text-emerald-800 hover:bg-emerald-100"
-    : "bg-red-100 text-red-800 hover:bg-red-100";
+    ? "bg-gradient-to-r from-emerald-500/10 to-teal-500/10 text-emerald-700 border border-emerald-200/30 hover:from-emerald-500/20 hover:to-teal-500/20"
+    : "bg-gradient-to-r from-red-500/10 to-pink-500/10 text-red-700 border border-red-200/30 hover:from-red-500/20 hover:to-pink-500/20";
 };
 
 const formatLastActive = (lastActive?: string) => {
@@ -244,10 +244,10 @@ export default function UsersTable({ users }: UsersTableProps) {
 
   return (
     <>
-      <Card className="shadow-sm" data-testid="users-table">
+      <Card premium className="group transition-all duration-500" data-testid="users-table">
         <CardHeader>
           <div className="flex justify-between items-center">
-            <CardTitle className="text-lg font-semibold">All Users</CardTitle>
+            <CardTitle gradient className="text-lg">All Users</CardTitle>
             <div className="flex items-center space-x-4">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
@@ -276,23 +276,23 @@ export default function UsersTable({ users }: UsersTableProps) {
         <CardContent className="p-0">
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="bg-muted/50">
+              <thead className="bg-gradient-to-r from-purple-50/50 to-indigo-50/50 backdrop-blur-sm">
                 <tr>
-                  <th className="text-left p-4 text-sm font-medium text-muted-foreground">User</th>
-                  <th className="text-left p-4 text-sm font-medium text-muted-foreground">Email</th>
-                  <th className="text-left p-4 text-sm font-medium text-muted-foreground">Role</th>
-                  <th className="text-left p-4 text-sm font-medium text-muted-foreground">Assigned Agents</th>
-                  <th className="text-left p-4 text-sm font-medium text-muted-foreground">Last Active</th>
-                  <th className="text-left p-4 text-sm font-medium text-muted-foreground">Status</th>
-                  <th className="text-left p-4 text-sm font-medium text-muted-foreground">Actions</th>
+                  <th className="text-left p-4 text-xs font-semibold text-purple-900/80 uppercase tracking-wider">User</th>
+                  <th className="text-left p-4 text-xs font-semibold text-purple-900/80 uppercase tracking-wider">Email</th>
+                  <th className="text-left p-4 text-xs font-semibold text-purple-900/80 uppercase tracking-wider">Role</th>
+                  <th className="text-left p-4 text-xs font-semibold text-purple-900/80 uppercase tracking-wider">Assigned Agents</th>
+                  <th className="text-left p-4 text-xs font-semibold text-purple-900/80 uppercase tracking-wider">Last Active</th>
+                  <th className="text-left p-4 text-xs font-semibold text-purple-900/80 uppercase tracking-wider">Status</th>
+                  <th className="text-left p-4 text-xs font-semibold text-purple-900/80 uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-border">
-                {filteredUsers.map((user) => (
-                  <tr key={user.id} className="hover:bg-muted/25" data-testid={`user-row-${user.id}`}>
+              <tbody className="divide-y divide-purple-100/20">
+                {filteredUsers.map((user, index) => (
+                  <tr key={user.id} className="hover:bg-gradient-to-r hover:from-purple-50/30 hover:to-indigo-50/30 hover:scale-[1.001] transition-all duration-300 group odd:bg-white/30 even:bg-purple-50/10" data-testid={`user-row-${user.id}`}>
                     <td className="p-4">
                       <div className="flex items-center space-x-3">
-                        <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center text-primary-foreground text-sm font-medium">
+                        <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-indigo-500 rounded-full flex items-center justify-center text-white text-sm font-medium shadow-lg group-hover:scale-110 transition-transform duration-300">
                           {getInitials(user.username)}
                         </div>
                         <span className="text-sm font-medium text-foreground">

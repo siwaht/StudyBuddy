@@ -328,6 +328,118 @@
     0%, 100% { transform: translateY(0px); }
     50% { transform: translateY(-10px); }
   }
+
+  /* Premium Table Row Animation */
+  @keyframes slideIn {
+    from {
+      width: 0;
+      opacity: 0;
+    }
+    to {
+      width: var(--final-width, 100%);
+      opacity: 1;
+    }
+  }
+
+  /* Number Counter Animation */
+  .counter-animation {
+    animation: countUp 1s ease-out;
+  }
+
+  @keyframes countUp {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* Number Fade Animation */
+  .number-animation {
+    animation: fadeInUp 0.6s ease-out;
+  }
+
+  @keyframes fadeInUp {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* Premium Border Effect */
+  .premium-border {
+    position: relative;
+    border: 1px solid hsla(250 95% 63% / 0.2);
+  }
+
+  .premium-border::before {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(135deg, hsl(250 95% 63%), hsl(280 85% 65%), hsl(300 85% 70%));
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    opacity: 0.5;
+  }
+
+  /* Empty State Styling */
+  .empty-state {
+    padding: 4rem 2rem;
+    text-align: center;
+    color: var(--muted-foreground);
+  }
+
+  .empty-state-icon {
+    width: 120px;
+    height: 120px;
+    margin: 0 auto 2rem;
+    opacity: 0.1;
+    background: var(--primary);
+    mask-size: contain;
+    mask-repeat: no-repeat;
+    mask-position: center;
+  }
+
+  .empty-state-title {
+    font-size: 1.5rem;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+    background: var(--primary);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .empty-state-description {
+    font-size: 0.875rem;
+    color: var(--muted-foreground);
+    max-width: 400px;
+    margin: 0 auto;
+  }
+
+  /* Shimmer Loading Animation */
+  @keyframes animate-shimmer {
+    0% {
+      transform: translateX(-100%);
+    }
+    100% {
+      transform: translateX(100%);
+    }
+  }
+
+  .animate-shimmer {
+    animation: animate-shimmer 2s linear infinite;
+  }
 }
 
 /* Sidebar Enhancements */

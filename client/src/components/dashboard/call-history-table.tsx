@@ -11,24 +11,24 @@ interface CallHistoryTableProps {
 const getSentimentColor = (sentiment?: string) => {
   switch (sentiment) {
     case "positive":
-      return "bg-emerald-100 text-emerald-800 hover:bg-emerald-100";
+      return "bg-gradient-to-r from-emerald-500/10 to-teal-500/10 text-emerald-700 border border-emerald-200/30 hover:from-emerald-500/20 hover:to-teal-500/20";
     case "negative":
-      return "bg-red-100 text-red-800 hover:bg-red-100";
+      return "bg-gradient-to-r from-red-500/10 to-pink-500/10 text-red-700 border border-red-200/30 hover:from-red-500/20 hover:to-pink-500/20";
     case "neutral":
-      return "bg-gray-100 text-gray-800 hover:bg-gray-100";
+      return "bg-gradient-to-r from-gray-500/10 to-slate-500/10 text-gray-700 border border-gray-200/30 hover:from-gray-500/20 hover:to-slate-500/20";
     default:
-      return "bg-gray-100 text-gray-800 hover:bg-gray-100";
+      return "bg-gradient-to-r from-gray-500/10 to-slate-500/10 text-gray-700 border border-gray-200/30 hover:from-gray-500/20 hover:to-slate-500/20";
   }
 };
 
 const getPlatformColor = (platform?: string) => {
   switch (platform) {
     case "elevenlabs":
-      return "bg-purple-100 text-purple-800 hover:bg-purple-100";
+      return "bg-gradient-to-r from-purple-500/10 to-pink-500/10 text-purple-700 border border-purple-200/30 hover:from-purple-500/20 hover:to-pink-500/20";
     case "livekit":
-      return "bg-blue-100 text-blue-800 hover:bg-blue-100";
+      return "bg-gradient-to-r from-blue-500/10 to-cyan-500/10 text-blue-700 border border-blue-200/30 hover:from-blue-500/20 hover:to-cyan-500/20";
     default:
-      return "bg-gray-100 text-gray-800 hover:bg-gray-100";
+      return "bg-gradient-to-r from-gray-500/10 to-slate-500/10 text-gray-700 border border-gray-200/30 hover:from-gray-500/20 hover:to-slate-500/20";
   }
 };
 
@@ -65,19 +65,19 @@ export default function CallHistoryTable({ calls }: CallHistoryTableProps) {
         {/* Desktop Table View */}
         <div className="hidden md:block overflow-x-auto">
           <table className="w-full">
-            <thead className="bg-gradient-to-r from-primary-solid/5 to-accent-solid/5 backdrop-blur-sm">
-              <tr className="border-b border-primary-solid/10">
-                <th className="text-left p-4 text-sm font-medium text-muted-foreground">Call ID</th>
-                <th className="text-left p-4 text-sm font-medium text-muted-foreground">Timestamp</th>
-                <th className="text-left p-4 text-sm font-medium text-muted-foreground">Agent & Platform</th>
-                <th className="text-left p-4 text-sm font-medium text-muted-foreground">Duration</th>
-                <th className="text-left p-4 text-sm font-medium text-muted-foreground">Sentiment</th>
-                <th className="text-left p-4 text-sm font-medium text-muted-foreground">Actions</th>
+            <thead className="bg-gradient-to-r from-purple-50/50 to-indigo-50/50 backdrop-blur-sm">
+              <tr className="border-b border-purple-200/30">
+                <th className="text-left p-4 text-xs font-semibold text-purple-900/80 uppercase tracking-wider">Call ID</th>
+                <th className="text-left p-4 text-xs font-semibold text-purple-900/80 uppercase tracking-wider">Timestamp</th>
+                <th className="text-left p-4 text-xs font-semibold text-purple-900/80 uppercase tracking-wider">Agent & Platform</th>
+                <th className="text-left p-4 text-xs font-semibold text-purple-900/80 uppercase tracking-wider">Duration</th>
+                <th className="text-left p-4 text-xs font-semibold text-purple-900/80 uppercase tracking-wider">Sentiment</th>
+                <th className="text-left p-4 text-xs font-semibold text-purple-900/80 uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-border">
-              {calls.map((call) => (
-                <tr key={call.id} className="premium-row hover:bg-gradient-to-r hover:from-primary-solid/5 hover:to-transparent transition-all duration-300" data-testid={`call-row-${call.id}`}>
+            <tbody className="divide-y divide-purple-100/20">
+              {calls.map((call, index) => (
+                <tr key={call.id} className="hover:bg-gradient-to-r hover:from-purple-50/30 hover:to-indigo-50/30 hover:scale-[1.001] transition-all duration-300 group odd:bg-white/30 even:bg-purple-50/10" data-testid={`call-row-${call.id}`}>
                   <td className="p-4 text-sm font-medium gradient-text">#{call.id}</td>
                   <td className="p-4 text-sm text-muted-foreground">
                     {formatTimestamp(call.startTime)}
