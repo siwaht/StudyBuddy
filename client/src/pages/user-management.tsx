@@ -37,10 +37,10 @@ export default function UserManagement() {
     confirmPassword: "",
     role: "user",
     permissions: {
-      dashboard: true,
-      calls: true,
-      agents: true,
-      analytics: true,
+      viewDashboard: true,
+      viewCallHistory: true,
+      viewAgents: true,
+      viewAnalytics: true,
     },
     agentIds: [] as string[],
   });
@@ -81,10 +81,10 @@ export default function UserManagement() {
         confirmPassword: "",
         role: "user",
         permissions: {
-          dashboard: true,
-          calls: true,
-          agents: true,
-          analytics: true,
+          viewDashboard: true,
+          viewCallHistory: true,
+          viewAgents: true,
+          viewAnalytics: true,
         },
         agentIds: [],
       });
@@ -281,11 +281,11 @@ export default function UserManagement() {
                   <div className="flex items-center space-x-2">
                     <Checkbox
                       id="permission-dashboard"
-                      checked={newUser.permissions.dashboard}
+                      checked={newUser.permissions.viewDashboard}
                       onCheckedChange={(checked) =>
                         setNewUser({
                           ...newUser,
-                          permissions: { ...newUser.permissions, dashboard: !!checked },
+                          permissions: { ...newUser.permissions, viewDashboard: !!checked },
                         })
                       }
                       data-testid="checkbox-permission-dashboard"
@@ -297,11 +297,11 @@ export default function UserManagement() {
                   <div className="flex items-center space-x-2">
                     <Checkbox
                       id="permission-calls"
-                      checked={newUser.permissions.calls}
+                      checked={newUser.permissions.viewCallHistory}
                       onCheckedChange={(checked) =>
                         setNewUser({
                           ...newUser,
-                          permissions: { ...newUser.permissions, calls: !!checked },
+                          permissions: { ...newUser.permissions, viewCallHistory: !!checked },
                         })
                       }
                       data-testid="checkbox-permission-calls"
@@ -313,11 +313,11 @@ export default function UserManagement() {
                   <div className="flex items-center space-x-2">
                     <Checkbox
                       id="permission-agents"
-                      checked={newUser.permissions.agents}
+                      checked={newUser.permissions.viewAgents}
                       onCheckedChange={(checked) =>
                         setNewUser({
                           ...newUser,
-                          permissions: { ...newUser.permissions, agents: !!checked },
+                          permissions: { ...newUser.permissions, viewAgents: !!checked },
                         })
                       }
                       data-testid="checkbox-permission-agents"
@@ -329,11 +329,11 @@ export default function UserManagement() {
                   <div className="flex items-center space-x-2">
                     <Checkbox
                       id="permission-analytics"
-                      checked={newUser.permissions.analytics}
+                      checked={newUser.permissions.viewAnalytics}
                       onCheckedChange={(checked) =>
                         setNewUser({
                           ...newUser,
-                          permissions: { ...newUser.permissions, analytics: !!checked },
+                          permissions: { ...newUser.permissions, viewAnalytics: !!checked },
                         })
                       }
                       data-testid="checkbox-permission-analytics"
@@ -361,10 +361,10 @@ export default function UserManagement() {
                   confirmPassword: "",
                   role: "user",
                   permissions: {
-                    dashboard: true,
-                    calls: true,
-                    agents: true,
-                    analytics: true,
+                    viewDashboard: true,
+                    viewCallHistory: true,
+                    viewAgents: true,
+                    viewAnalytics: true,
                   },
                   agentIds: [],
                 });
