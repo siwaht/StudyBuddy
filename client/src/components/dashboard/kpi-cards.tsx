@@ -8,7 +8,7 @@ interface KpiCardsProps {
 
 export default function KpiCards({ stats }: KpiCardsProps) {
   
-  const kpis = [
+  const baseKpis = [
     {
       title: "Total Calls Handled",
       value: stats.totalCalls.toLocaleString(),
@@ -25,22 +25,36 @@ export default function KpiCards({ stats }: KpiCardsProps) {
       trendColor: "text-emerald-600",
       trendUp: false,
     },
-    {
+  ];
+
+  // Add platform-specific KPIs based on what platforms the user has agents for
+  const platformKpis = [];
+  
+  if (stats.platforms?.includes('elevenlabs')) {
+    platformKpis.push({
       title: "ElevenLabs Latency (P95)",
       value: `${stats.elevenLabsLatencyP95}ms`,
       icon: Zap,
       trend: "Optimal",
       trendColor: "text-amber-600",
-    },
-    {
+      trendUp: undefined,
+      valueColor: undefined,
+    });
+  }
+
+  if (stats.platforms?.includes('livekit')) {
+    platformKpis.push({
       title: "LiveKit Active Rooms",
       value: stats.activeRooms,
       icon: Circle,
       trend: "online",
       trendColor: "text-emerald-500",
+      trendUp: undefined,
       valueColor: "text-primary",
-    },
-  ];
+    });
+  }
+
+  const kpis = [...baseKpis, ...platformKpis];
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">

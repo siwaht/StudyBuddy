@@ -5,6 +5,7 @@ export interface DashboardStats {
   activeRooms: number;
   callVolumeData: Array<{ time: string; elevenlabs: number; livekit: number }>;
   recentCalls: any[];
+  platforms: string[];
 }
 
 export interface CallWithAgent {

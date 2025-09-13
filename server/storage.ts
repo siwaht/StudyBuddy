@@ -756,6 +756,7 @@ export class DatabaseStorage implements IStorage {
     activeRooms: number;
     callVolumeData: Array<{ time: string; elevenlabs: number; livekit: number }>;
     recentCalls: Call[];
+    platforms: string[];
   }> {
     const assignedAgentIds = await this.getAssignedAgentIds(userId);
     
@@ -766,7 +767,8 @@ export class DatabaseStorage implements IStorage {
         elevenLabsLatencyP95: 0,
         activeRooms: 0,
         callVolumeData: [],
-        recentCalls: []
+        recentCalls: [],
+        platforms: []
       };
     }
 
@@ -800,6 +802,9 @@ export class DatabaseStorage implements IStorage {
     // Get agents for volume data
     const allAgents = await db.select().from(agents)
       .where(inArray(agents.id, assignedAgentIds));
+    
+    // Get unique platforms for assigned agents
+    const platforms = Array.from(new Set(allAgents.map(a => a.platform)));
 
     // Generate call volume data for the last 7 days
     const callVolumeData = [];
@@ -844,7 +849,8 @@ export class DatabaseStorage implements IStorage {
       elevenLabsLatencyP95,
       activeRooms: activeRooms.length,
       callVolumeData,
-      recentCalls
+      recentCalls,
+      platforms
     };
   }
 
