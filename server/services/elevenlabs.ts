@@ -65,8 +65,9 @@ class ElevenLabsService {
   }
 
   // Generate signed URL for private agents
-  async getSignedUrl(agentId: string): Promise<string | null> {
-    if (!this.apiKey) {
+  async getSignedUrl(agentId: string, accountId?: string): Promise<string | null> {
+    const apiKey = await this.getApiKey(accountId);
+    if (!apiKey) {
       console.error("ElevenLabs API key not configured");
       return null;
     }
@@ -96,7 +97,8 @@ class ElevenLabsService {
 
   // Fetch agent details
   async getAgent(agentId: string, accountId?: string): Promise<any> {
-    if (!this.apiKey) {
+    const apiKey = await this.getApiKey(accountId);
+    if (!apiKey) {
       return null;
     }
 
@@ -124,7 +126,8 @@ class ElevenLabsService {
 
   // List all agents
   async listAgents(accountId?: string): Promise<any[]> {
-    if (!this.apiKey) {
+    const apiKey = await this.getApiKey(accountId);
+    if (!apiKey) {
       return [];
     }
 
@@ -153,11 +156,14 @@ class ElevenLabsService {
 
   // Get conversation details
   async getConversation(conversationId: string, accountId?: string): Promise<any> {
-    if (!this.apiKey) {
+    const apiKey = await this.getApiKey(accountId);
+    if (!apiKey) {
+      console.error('No API key available for getConversation');
       return null;
     }
 
     try {
+      console.log(`Fetching conversation ${conversationId} from ElevenLabs API`);
       const response = await fetch(
         `https://api.elevenlabs.io/v1/convai/conversations/${conversationId}`,
         {
@@ -169,19 +175,26 @@ class ElevenLabsService {
       );
 
       if (!response.ok) {
-        throw new Error(`Failed to fetch conversation: ${response.statusText}`);
+        console.error(`Failed to fetch conversation ${conversationId}: ${response.status} ${response.statusText}`);
+        if (response.status === 404) {
+          console.error(`Conversation ${conversationId} not found in ElevenLabs`);
+        }
+        return null;
       }
 
-      return await response.json();
+      const conversation = await response.json();
+      console.log(`Successfully fetched conversation ${conversationId}`);
+      return conversation;
     } catch (error) {
-      console.error("Error fetching conversation:", error);
+      console.error(`Error fetching conversation ${conversationId}:`, error);
       return null;
     }
   }
 
   // List conversations
   async listConversations(agentId?: string, limit: number = 100, accountId?: string): Promise<any[]> {
-    if (!this.apiKey) {
+    const apiKey = await this.getApiKey(accountId);
+    if (!apiKey) {
       return [];
     }
 
@@ -304,11 +317,21 @@ class ElevenLabsService {
         has_recording_url: !!conversation.recording_url,
         has_audio: conversation.has_audio,
         has_audio_url: !!conversation.audio_url,
-        available_fields: Object.keys(conversation).filter(k => k.includes('audio') || k.includes('recording'))
+        has_audio_file: !!conversation.audio_file,
+        has_media: !!conversation.media,
+        available_fields: Object.keys(conversation).filter(k => k.toLowerCase().includes('audio') || k.toLowerCase().includes('recording') || k.toLowerCase().includes('media')),
+        all_fields: Object.keys(conversation)
       });
 
-      // Check if there's a recording_url or has_audio is not false
-      return !!(conversation.recording_url || conversation.audio_url || conversation.has_audio !== false);
+      // Check multiple fields for audio availability
+      const hasAudio = !!(conversation.recording_url || 
+                         conversation.audio_url || 
+                         conversation.audio_file || 
+                         conversation.media?.audio || 
+                         conversation.has_audio === true);
+      
+      console.log(`Conversation ${conversationId} hasAudio result: ${hasAudio}`);
+      return hasAudio;
     } catch (error) {
       console.error(`Error checking audio availability for conversation ${conversationId}:`, error);
       return false;
@@ -316,8 +339,9 @@ class ElevenLabsService {
   }
 
   // Get recording URL for a conversation (for streaming)
-  async getConversationRecordingUrl(conversationId: string): Promise<string | null> {
-    if (!this.apiKey) {
+  async getConversationRecordingUrl(conversationId: string, accountId?: string): Promise<string | null> {
+    const apiKey = await this.getApiKey(accountId);
+    if (!apiKey) {
       return null;
     }
 
