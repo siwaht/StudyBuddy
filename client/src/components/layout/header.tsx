@@ -10,6 +10,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 const getPageInfo = (pathname: string) => {
   switch (pathname) {
@@ -72,15 +77,22 @@ export default function Header() {
           </div>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                className="relative h-8 w-8 rounded-full"
-                data-testid="button-user-menu"
-              >
-                <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center text-primary-foreground font-medium">
-                  {getUserInitials()}
-                </div>
-              </Button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className="relative h-10 w-10 rounded-full border-2 border-primary hover:bg-primary/10"
+                    data-testid="button-user-menu"
+                  >
+                    <div className="w-full h-full bg-gradient-to-br from-purple-600 to-indigo-600 rounded-full flex items-center justify-center text-white font-semibold text-sm shadow-md">
+                      {getUserInitials()}
+                    </div>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>User menu • Click to logout</p>
+                </TooltipContent>
+              </Tooltip>
             </DropdownMenuTrigger>
             <DropdownMenuContent className="w-56" align="end" forceMount>
               <DropdownMenuLabel className="font-normal">
