@@ -66,9 +66,9 @@
   --shadow-2xl: 0 35px 60px -15px rgb(0 0 0 / 0.08);
   --shadow-premium: 0 10px 40px -10px hsla(250 95% 63% / 0.2);
   
-  /* Smooth Transitions */
-  --transition-all: all 0.3s ease;
-  --transition-transform: transform 0.3s ease;
+  /* Professional Transitions */
+  --transition-all: all 0.2s ease;
+  --transition-transform: transform 0.2s ease;
 }
 
 .dark {
@@ -179,9 +179,8 @@
   }
 
   .card-premium:hover {
-    transform: translateY(-2px);
-    box-shadow: var(--shadow-xl);
-    border-color: hsla(250 95% 63% / 0.2);
+    box-shadow: var(--shadow-lg);
+    border-color: hsla(250 95% 63% / 0.15);
   }
 
   /* Glassmorphism Effect */
@@ -211,8 +210,7 @@
   }
 
   .btn-premium:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 6px 20px 0 rgba(139, 92, 246, 0.35);
+    box-shadow: 0 4px 16px 0 rgba(139, 92, 246, 0.25);
     background: linear-gradient(135deg, hsl(250 95% 65%) 0%, hsl(265 95% 72%) 100%);
   }
 
@@ -249,30 +247,14 @@
     to { transform: rotate(360deg); }
   }
 
-  /* Subtle Animations Only */
+  /* Professional Animations - Minimal use only */
   @keyframes fadeIn {
     from { opacity: 0; }
     to { opacity: 1; }
   }
 
-  @keyframes slideInUp {
-    from {
-      opacity: 0;
-      transform: translateY(10px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
-  }
-
-  .animate-fadeIn {
-    animation: fadeIn 0.4s ease;
-  }
-
-  .animate-slideInUp {
-    animation: slideInUp 0.4s ease;
-  }
+  /* Removed slideInUp and other flashy animations */
+  /* Keep animations minimal for professional appearance */
 }
 
 /* Sidebar Styles */
