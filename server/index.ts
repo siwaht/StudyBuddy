@@ -10,8 +10,9 @@ import { authenticate } from "./auth";
 
 const app = express();
 
-// Configure trust proxy for production (required when behind load balancer/proxy)
-if (process.env.NODE_ENV === 'production') {
+// Configure trust proxy for Replit environment and production
+// Replit always runs apps behind a proxy, so we need to trust it
+if (process.env.REPL_ID || process.env.NODE_ENV === 'production') {
   app.set('trust proxy', 1); // Trust first proxy
 }
 
@@ -40,9 +41,11 @@ const generalLimiter = rateLimit({
 // Stricter rate limiting for auth endpoints
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // Limit each IP to 5 auth requests per windowMs
+  max: 10, // Limit each IP to 10 auth requests per windowMs
   message: 'Too many authentication attempts, please try again later.',
   skipSuccessfulRequests: true, // Don't count successful requests
+  standardHeaders: true,
+  legacyHeaders: false,
 });
 
 // Apply general rate limiting to all routes
