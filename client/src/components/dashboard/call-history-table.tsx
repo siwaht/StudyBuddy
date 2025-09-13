@@ -2,6 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Link } from "wouter";
+import { Mic, FileText, MicOff, FileX } from "lucide-react";
 import type { CallWithAgent } from "@/lib/types";
 
 interface CallHistoryTableProps {
@@ -72,6 +73,8 @@ export default function CallHistoryTable({ calls }: CallHistoryTableProps) {
                 <th className="text-left p-4 text-xs font-medium text-muted-foreground">Agent & Platform</th>
                 <th className="text-left p-4 text-xs font-medium text-muted-foreground">Duration</th>
                 <th className="text-left p-4 text-xs font-medium text-muted-foreground">Sentiment</th>
+                <th className="text-center p-4 text-xs font-medium text-muted-foreground">Recording</th>
+                <th className="text-center p-4 text-xs font-medium text-muted-foreground">Transcript</th>
                 <th className="text-left p-4 text-xs font-medium text-muted-foreground">Actions</th>
               </tr>
             </thead>
@@ -103,6 +106,28 @@ export default function CallHistoryTable({ calls }: CallHistoryTableProps) {
                     >
                       {call.sentiment ? call.sentiment.charAt(0).toUpperCase() + call.sentiment.slice(1) : "Unknown"}
                     </Badge>
+                  </td>
+                  <td className="p-4 text-center">
+                    {call.recordingUrl ? (
+                      <div className="flex justify-center">
+                        <Mic className="h-4 w-4 text-green-600" />
+                      </div>
+                    ) : (
+                      <div className="flex justify-center">
+                        <MicOff className="h-4 w-4 text-muted-foreground" />
+                      </div>
+                    )}
+                  </td>
+                  <td className="p-4 text-center">
+                    {call.transcript && call.transcript.length > 0 ? (
+                      <div className="flex justify-center">
+                        <FileText className="h-4 w-4 text-green-600" />
+                      </div>
+                    ) : (
+                      <div className="flex justify-center">
+                        <FileX className="h-4 w-4 text-muted-foreground" />
+                      </div>
+                    )}
                   </td>
                   <td className="p-4">
                     <Link href={`/calls/${call.id}`}>
@@ -145,6 +170,29 @@ export default function CallHistoryTable({ calls }: CallHistoryTableProps) {
                 <span className="text-sm text-muted-foreground">
                   {formatDuration(call.duration)}
                 </span>
+              </div>
+              
+              <div className="flex items-center gap-4 mb-2">
+                <div className="flex items-center gap-1">
+                  {call.recordingUrl ? (
+                    <Mic className="h-4 w-4 text-green-600" />
+                  ) : (
+                    <MicOff className="h-4 w-4 text-muted-foreground" />
+                  )}
+                  <span className="text-xs text-muted-foreground">
+                    {call.recordingUrl ? "Recording available" : "No recording"}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1">
+                  {call.transcript && call.transcript.length > 0 ? (
+                    <FileText className="h-4 w-4 text-green-600" />
+                  ) : (
+                    <FileX className="h-4 w-4 text-muted-foreground" />
+                  )}
+                  <span className="text-xs text-muted-foreground">
+                    {call.transcript && call.transcript.length > 0 ? "Transcript available" : "No transcript"}
+                  </span>
+                </div>
               </div>
               
               <div className="flex gap-2">
