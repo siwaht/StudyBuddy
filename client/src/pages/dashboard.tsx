@@ -121,16 +121,16 @@ export default function Dashboard() {
           {Array.from({ length: 4 }).map((_, i) => (
             <div
               key={i}
-              className="h-32 rounded-xl skeleton-premium bg-gradient-to-r from-muted/50 via-muted to-muted/50 animate-pulse shimmer"
+              className="h-32 rounded-xl skeleton-premium bg-gradient-to-r from-muted/50 via-muted to-muted/50 animate-pulse"
               style={{ animationDelay: `${i * 100}ms` }}
             />
           ))}
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="h-80 rounded-xl skeleton-premium bg-gradient-to-r from-muted/50 via-muted to-muted/50 animate-pulse shimmer" />
-          <div className="h-80 rounded-xl skeleton-premium bg-gradient-to-r from-muted/50 via-muted to-muted/50 animate-pulse shimmer" style={{ animationDelay: "200ms" }} />
+          <div className="h-80 rounded-xl skeleton-premium bg-gradient-to-r from-muted/50 via-muted to-muted/50 animate-pulse" />
+          <div className="h-80 rounded-xl skeleton-premium bg-gradient-to-r from-muted/50 via-muted to-muted/50 animate-pulse" style={{ animationDelay: "200ms" }} />
         </div>
-        <div className="h-96 rounded-xl skeleton-premium bg-gradient-to-r from-muted/50 via-muted to-muted/50 animate-pulse shimmer" style={{ animationDelay: "400ms" }} />
+        <div className="h-96 rounded-xl skeleton-premium bg-gradient-to-r from-muted/50 via-muted to-muted/50 animate-pulse" style={{ animationDelay: "400ms" }} />
       </div>
     );
   }
@@ -148,11 +148,11 @@ export default function Dashboard() {
   return (
     <div className="p-6 space-y-6 animate-fadeIn" data-testid="dashboard-page">
       {/* Quick Search Widget */}
-      <Card premium className="group transition-all duration-500 hover:scale-[1.01] animate-slideInUp parallax-hover">
+      <Card premium className="group transition-all duration-300 hover:scale-[1.01] animate-slideInUp">
         <CardHeader>
           <CardTitle gradient className="flex items-center justify-between">
             <span className="flex items-center gap-2">
-              <Search className="h-5 w-5 text-primary-solid float" />
+              <Search className="h-5 w-5 text-primary-solid" />
               <span>Quick Search</span>
             </span>
             <Button
@@ -224,22 +224,22 @@ export default function Dashboard() {
             <div className="grid grid-cols-3 gap-4 text-center">
               <div className="group/stat hover:scale-105 transition-all duration-300">
                 <div className="flex items-center justify-center gap-2">
-                  <Phone className="h-4 w-4 text-blue-600 float" />
-                  <span className="text-2xl font-bold gradient-text number-animation">{stats.totalCalls || 0}</span>
+                  <Phone className="h-4 w-4 text-blue-600" />
+                  <span className="text-2xl font-bold gradient-text">{stats.totalCalls || 0}</span>
                 </div>
                 <p className="text-xs text-muted-foreground">Total Calls</p>
               </div>
               <div className="group/stat hover:scale-105 transition-all duration-300">
                 <div className="flex items-center justify-center gap-2">
-                  <MessageSquare className="h-4 w-4 text-green-600 float" />
-                  <span className="text-2xl font-bold gradient-text number-animation">{stats.activeRooms || 0}</span>
+                  <MessageSquare className="h-4 w-4 text-green-600" />
+                  <span className="text-2xl font-bold gradient-text">{stats.activeRooms || 0}</span>
                 </div>
                 <p className="text-xs text-muted-foreground">Active Rooms</p>
               </div>
               <div className="group/stat hover:scale-105 transition-all duration-300">
                 <div className="flex items-center justify-center gap-2">
-                  <BarChart className="h-4 w-4 text-purple-600 float" />
-                  <span className="text-2xl font-bold gradient-text number-animation">
+                  <BarChart className="h-4 w-4 text-purple-600" />
+                  <span className="text-2xl font-bold gradient-text">
                     {stats.elevenLabsLatencyP95 ? stats.elevenLabsLatencyP95.toFixed(0) : 0}ms
                   </span>
                 </div>

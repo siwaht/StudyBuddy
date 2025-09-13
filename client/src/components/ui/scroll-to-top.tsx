@@ -40,14 +40,14 @@ export function ScrollToTop() {
         "before:translate-x-[-200%] hover:before:translate-x-[200%]",
         "before:transition-transform before:duration-700",
         isVisible 
-          ? "opacity-100 translate-y-0 animate-bounceIn" 
+          ? "opacity-100 translate-y-0" 
           : "opacity-0 translate-y-20 pointer-events-none"
       )}
       size="icon"
       aria-label="Scroll to top"
       data-testid="scroll-to-top"
     >
-      <ArrowUp className="h-5 w-5 animate-bounce" />
+      <ArrowUp className="h-5 w-5" />
     </Button>
   );
 }
