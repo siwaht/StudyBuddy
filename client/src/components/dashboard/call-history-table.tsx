@@ -52,11 +52,11 @@ const formatTimestamp = (timestamp: string) => {
 
 export default function CallHistoryTable({ calls }: CallHistoryTableProps) {
   return (
-    <Card className="shadow-sm" data-testid="call-history-table">
+    <Card premium className="group transition-all duration-500" data-testid="call-history-table">
       <CardHeader>
         <div className="flex justify-between items-center">
-          <CardTitle className="text-lg font-semibold">Recent Call History</CardTitle>
-          <Button variant="default" size="sm" data-testid="button-view-all-calls">
+          <CardTitle gradient className="text-lg">Recent Call History</CardTitle>
+          <Button className="btn-premium" size="sm" data-testid="button-view-all-calls">
             View All Calls
           </Button>
         </div>
@@ -65,8 +65,8 @@ export default function CallHistoryTable({ calls }: CallHistoryTableProps) {
         {/* Desktop Table View */}
         <div className="hidden md:block overflow-x-auto">
           <table className="w-full">
-            <thead className="bg-muted/50">
-              <tr>
+            <thead className="bg-gradient-to-r from-primary-solid/5 to-accent-solid/5 backdrop-blur-sm">
+              <tr className="border-b border-primary-solid/10">
                 <th className="text-left p-4 text-sm font-medium text-muted-foreground">Call ID</th>
                 <th className="text-left p-4 text-sm font-medium text-muted-foreground">Timestamp</th>
                 <th className="text-left p-4 text-sm font-medium text-muted-foreground">Agent & Platform</th>
@@ -77,8 +77,8 @@ export default function CallHistoryTable({ calls }: CallHistoryTableProps) {
             </thead>
             <tbody className="divide-y divide-border">
               {calls.map((call) => (
-                <tr key={call.id} className="hover:bg-muted/25" data-testid={`call-row-${call.id}`}>
-                  <td className="p-4 text-sm text-foreground">#{call.id}</td>
+                <tr key={call.id} className="premium-row hover:bg-gradient-to-r hover:from-primary-solid/5 hover:to-transparent transition-all duration-300" data-testid={`call-row-${call.id}`}>
+                  <td className="p-4 text-sm font-medium gradient-text">#{call.id}</td>
                   <td className="p-4 text-sm text-muted-foreground">
                     {formatTimestamp(call.startTime)}
                   </td>
@@ -87,7 +87,7 @@ export default function CallHistoryTable({ calls }: CallHistoryTableProps) {
                       <span className="text-sm text-foreground">{call.agent?.name}</span>
                       <Badge 
                         variant="secondary" 
-                        className={`text-xs w-fit mt-1 ${getPlatformColor(call.agent?.platform)}`}
+                        className={`text-xs w-fit mt-1 badge-premium ${getPlatformColor(call.agent?.platform)}`}
                       >
                         {call.agent?.platform === "elevenlabs" ? "ElevenLabs" : "LiveKit"}
                       </Badge>
@@ -99,7 +99,7 @@ export default function CallHistoryTable({ calls }: CallHistoryTableProps) {
                   <td className="p-4">
                     <Badge 
                       variant="secondary" 
-                      className={`text-xs ${getSentimentColor(call.sentiment)}`}
+                      className={`text-xs badge-premium ${getSentimentColor(call.sentiment)} transition-all duration-300 hover:scale-105`}
                     >
                       {call.sentiment ? call.sentiment.charAt(0).toUpperCase() + call.sentiment.slice(1) : "Unknown"}
                     </Badge>
@@ -109,7 +109,7 @@ export default function CallHistoryTable({ calls }: CallHistoryTableProps) {
                       <Button 
                         variant="ghost" 
                         size="sm" 
-                        className="text-primary hover:text-primary/80"
+                        className="text-primary hover:text-primary/80 hover:bg-primary-solid/10 transition-all duration-300 hover:scale-105"
                         data-testid={`button-view-details-${call.id}`}
                       >
                         View Details
@@ -125,7 +125,7 @@ export default function CallHistoryTable({ calls }: CallHistoryTableProps) {
         {/* Mobile Card View */}
         <div className="md:hidden p-4 space-y-4">
           {calls.slice(0, 5).map((call) => (
-            <div key={call.id} className="border rounded-lg p-4 space-y-3">
+            <div key={call.id} className="glass rounded-xl p-4 space-y-3 hover:scale-[1.02] transition-all duration-300">
               <div className="flex justify-between items-start">
                 <div>
                   <p className="font-medium text-sm">{call.id}</p>
@@ -133,13 +133,13 @@ export default function CallHistoryTable({ calls }: CallHistoryTableProps) {
                     {formatTimestamp(call.startTime)}
                   </p>
                 </div>
-                <Badge className={getSentimentColor(call.sentiment)}>
+                <Badge className={`badge-premium ${getSentimentColor(call.sentiment)}`}>
                   {call.sentiment || "unknown"}
                 </Badge>
               </div>
               
               <div className="flex items-center gap-2">
-                <Badge variant="outline" className={getPlatformColor(call.agent?.platform)}>
+                <Badge variant="outline" className={`badge-premium ${getPlatformColor(call.agent?.platform)}`}>
                   {call.agent?.platform || "unknown"}
                 </Badge>
                 <span className="text-sm text-muted-foreground">
@@ -149,7 +149,7 @@ export default function CallHistoryTable({ calls }: CallHistoryTableProps) {
               
               <div className="flex gap-2">
                 <Link href={`/calls/${call.id}`}>
-                  <Button size="sm" variant="outline" className="w-full">
+                  <Button size="sm" className="btn-premium w-full">
                     View Details
                   </Button>
                 </Link>

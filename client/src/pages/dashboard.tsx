@@ -119,14 +119,18 @@ export default function Dashboard() {
       <div className="p-6 space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {Array.from({ length: 4 }).map((_, i) => (
-            <Skeleton key={i} className="h-32" />
+            <div
+              key={i}
+              className="h-32 rounded-xl skeleton-premium bg-gradient-to-r from-muted/50 via-muted to-muted/50 animate-pulse shimmer"
+              style={{ animationDelay: `${i * 100}ms` }}
+            />
           ))}
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <Skeleton className="h-80" />
-          <Skeleton className="h-80" />
+          <div className="h-80 rounded-xl skeleton-premium bg-gradient-to-r from-muted/50 via-muted to-muted/50 animate-pulse shimmer" />
+          <div className="h-80 rounded-xl skeleton-premium bg-gradient-to-r from-muted/50 via-muted to-muted/50 animate-pulse shimmer" style={{ animationDelay: "200ms" }} />
         </div>
-        <Skeleton className="h-96" />
+        <div className="h-96 rounded-xl skeleton-premium bg-gradient-to-r from-muted/50 via-muted to-muted/50 animate-pulse shimmer" style={{ animationDelay: "400ms" }} />
       </div>
     );
   }
@@ -144,15 +148,15 @@ export default function Dashboard() {
   return (
     <div className="p-6 space-y-6" data-testid="dashboard-page">
       {/* Quick Search Widget */}
-      <Card>
+      <Card premium className="group transition-all duration-500 hover:scale-[1.01]">
         <CardHeader>
-          <CardTitle className="flex items-center justify-between">
+          <CardTitle gradient className="flex items-center justify-between">
             <span className="flex items-center gap-2">
-              <Search className="h-5 w-5" />
-              Quick Search
+              <Search className="h-5 w-5 text-primary-solid float" />
+              <span>Quick Search</span>
             </span>
             <Button
-              variant="outline"
+              className="btn-premium"
               size="sm"
               onClick={() => setQuickSearchOpen(true)}
               data-testid="quick-search-button"
@@ -166,8 +170,8 @@ export default function Dashboard() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Search Presets */}
             <div>
-              <h3 className="text-sm font-medium mb-3 flex items-center gap-2">
-                <Filter className="h-4 w-4" />
+              <h3 className="text-sm font-bold mb-3 flex items-center gap-2 gradient-text">
+                <Filter className="h-4 w-4 text-primary-solid" />
                 Quick Filters
               </h3>
               <div className="flex flex-wrap gap-2">
@@ -176,6 +180,7 @@ export default function Dashboard() {
                     key={preset.id}
                     variant="outline"
                     size="sm"
+                    className="glass hover:bg-primary-solid/10 hover:scale-105 transition-all duration-300"
                     onClick={() => handlePresetSearch(preset)}
                     data-testid={`preset-${preset.id}`}
                   >
@@ -187,8 +192,8 @@ export default function Dashboard() {
             
             {/* Recent Searches */}
             <div>
-              <h3 className="text-sm font-medium mb-3 flex items-center gap-2">
-                <Clock className="h-4 w-4" />
+              <h3 className="text-sm font-bold mb-3 flex items-center gap-2 gradient-text">
+                <Clock className="h-4 w-4 text-primary-solid" />
                 Recent Searches
               </h3>
               {recentSearches.length > 0 ? (
@@ -197,7 +202,7 @@ export default function Dashboard() {
                     <Badge
                       key={index}
                       variant="secondary"
-                      className="cursor-pointer hover:bg-secondary/80"
+                      className="badge-premium cursor-pointer hover:scale-105 transition-all duration-300"
                       onClick={() => {
                         setQuickSearchQuery(search);
                         setQuickSearchOpen(true);
@@ -215,26 +220,26 @@ export default function Dashboard() {
           </div>
           
           {/* Search Insights */}
-          <div className="mt-4 pt-4 border-t">
+          <div className="mt-4 pt-4 border-t border-primary-solid/10">
             <div className="grid grid-cols-3 gap-4 text-center">
-              <div>
+              <div className="group/stat hover:scale-105 transition-all duration-300">
                 <div className="flex items-center justify-center gap-2">
-                  <Phone className="h-4 w-4 text-blue-600" />
-                  <span className="text-2xl font-bold">{stats.totalCalls || 0}</span>
+                  <Phone className="h-4 w-4 text-blue-600 float" />
+                  <span className="text-2xl font-bold gradient-text number-animation">{stats.totalCalls || 0}</span>
                 </div>
                 <p className="text-xs text-muted-foreground">Total Calls</p>
               </div>
-              <div>
+              <div className="group/stat hover:scale-105 transition-all duration-300">
                 <div className="flex items-center justify-center gap-2">
-                  <MessageSquare className="h-4 w-4 text-green-600" />
-                  <span className="text-2xl font-bold">{stats.activeRooms || 0}</span>
+                  <MessageSquare className="h-4 w-4 text-green-600 float" />
+                  <span className="text-2xl font-bold gradient-text number-animation">{stats.activeRooms || 0}</span>
                 </div>
                 <p className="text-xs text-muted-foreground">Active Rooms</p>
               </div>
-              <div>
+              <div className="group/stat hover:scale-105 transition-all duration-300">
                 <div className="flex items-center justify-center gap-2">
-                  <BarChart className="h-4 w-4 text-purple-600" />
-                  <span className="text-2xl font-bold">
+                  <BarChart className="h-4 w-4 text-purple-600 float" />
+                  <span className="text-2xl font-bold gradient-text number-animation">
                     {stats.elevenLabsLatencyP95 ? stats.elevenLabsLatencyP95.toFixed(0) : 0}ms
                   </span>
                 </div>
