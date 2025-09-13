@@ -436,6 +436,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.delete("/api/agents/:id", requireAuth, requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      
+      // Check if agent exists
+      const agent = await storage.getAgent(req.user!.id, id);
+      if (!agent) {
+        return res.status(404).json({ message: "Agent not found or access denied" });
+      }
+      
+      // Delete the agent
+      const success = await storage.deleteAgent(id);
+      if (!success) {
+        return res.status(500).json({ message: "Failed to delete agent" });
+      }
+      
+      res.json({ message: "Agent deleted successfully" });
+    } catch (error) {
+      console.error('Error deleting agent:', error);
+      res.status(500).json({ message: "Failed to delete agent" });
+    }
+  });
+
   // Call routes - Protected with data isolation
   app.get("/api/calls", requireAuth, async (req: Request, res: Response) => {
     try {

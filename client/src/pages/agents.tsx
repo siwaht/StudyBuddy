@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Download, Bot, Settings2, Search, AlertCircle } from "lucide-react";
+import { Download, Bot, Settings2, Search, AlertCircle, Trash2 } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import {
@@ -13,6 +13,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -40,6 +50,7 @@ interface Agent {
 export default function Agents() {
   const [isImportAgentOpen, setIsImportAgentOpen] = useState(false);
   const [isConfigureAgentOpen, setIsConfigureAgentOpen] = useState(false);
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
   const [importForm, setImportForm] = useState({
     platform: "elevenlabs",
@@ -119,6 +130,34 @@ export default function Agents() {
     },
   });
 
+  const deleteAgentMutation = useMutation({
+    mutationFn: async (agentId: string) => {
+      const response = await apiRequest("DELETE", `/api/agents/${agentId}`);
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || "Failed to delete agent");
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Success",
+        description: "Agent deleted successfully",
+      });
+      setIsConfigureAgentOpen(false);
+      setIsDeleteConfirmOpen(false);
+      setSelectedAgent(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/agents"] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to delete agent",
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleSearchAgent = () => {
     if (!importForm.agentId.trim()) {
       toast({
@@ -134,6 +173,11 @@ export default function Agents() {
   const handleImportAgent = () => {
     if (!searchedAgent) return;
     importAgentMutation.mutate(importForm);
+  };
+
+  const handleDeleteAgent = () => {
+    if (!selectedAgent) return;
+    deleteAgentMutation.mutate(selectedAgent.id);
   };
 
   const getStatusColor = (isActive: boolean) => {
@@ -471,7 +515,16 @@ export default function Agents() {
               </div>
             )}
           </div>
-          <DialogFooter>
+          <DialogFooter className="flex justify-between">
+            <Button
+              variant="destructive"
+              onClick={() => setIsDeleteConfirmOpen(true)}
+              disabled={deleteAgentMutation.isPending}
+              data-testid="button-delete-agent"
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Delete Agent
+            </Button>
             <Button
               variant="outline"
               onClick={() => {
@@ -485,6 +538,35 @@ export default function Agents() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={isDeleteConfirmOpen} onOpenChange={setIsDeleteConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete the agent "{selectedAgent?.name}". This action cannot be undone.
+              All user-agent assignments for this agent will also be removed.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              onClick={() => setIsDeleteConfirmOpen(false)}
+              data-testid="button-cancel-delete"
+            >
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteAgent}
+              disabled={deleteAgentMutation.isPending}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              data-testid="button-confirm-delete"
+            >
+              {deleteAgentMutation.isPending ? "Deleting..." : "Delete Agent"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

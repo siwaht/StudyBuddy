@@ -36,6 +36,7 @@ export interface IStorage {
   getAllAgents(userId: string): Promise<Agent[]>;
   createAgent(agent: InsertAgent): Promise<Agent>;
   updateAgent(id: string, updates: Partial<Agent>): Promise<Agent | undefined>;
+  deleteAgent(agentId: string): Promise<boolean>;
 
   // Calls - REQUIRES USER ID FOR DATA ISOLATION
   getCall(userId: string, callId: string): Promise<Call | undefined>;
@@ -671,6 +672,24 @@ export class MemStorage implements IStorage {
     const updatedAgent = { ...agent, ...updates };
     this.agents.set(id, updatedAgent);
     return updatedAgent;
+  }
+
+  async deleteAgent(agentId: string): Promise<boolean> {
+    const agent = this.agents.get(agentId);
+    if (!agent) return false;
+    
+    // Remove all user-agent assignments for this agent
+    const userAgentIds = Array.from(this.userAgents.keys()).filter(key => {
+      const userAgent = this.userAgents.get(key);
+      return userAgent && userAgent.agentId === agentId;
+    });
+    
+    for (const userAgentId of userAgentIds) {
+      this.userAgents.delete(userAgentId);
+    }
+    
+    // Delete the agent
+    return this.agents.delete(agentId);
   }
 
   // Call methods - WITH DATA ISOLATION
