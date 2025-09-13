@@ -1275,26 +1275,46 @@ export class DatabaseStorage implements IStorage {
       if (conversation.transcript && Array.isArray(conversation.transcript)) {
         formattedTranscript = conversation.transcript.map((entry: any, index: number) => {
           // Handle ElevenLabs format with role and message
-          if (entry.role && entry.message) {
+          if (entry.role && entry.message !== null && entry.message !== undefined) {
             return {
               timestamp: entry.time_in_call_secs ? 
-                `${Math.floor(entry.time_in_call_secs / 60).toString().padStart(2, '0')}:${(entry.time_in_call_secs % 60).toString().padStart(2, '0')}` : 
+                `${Math.floor(entry.time_in_call_secs / 60).toString().padStart(2, '0')}:${Math.floor(entry.time_in_call_secs % 60).toString().padStart(2, '0')}` : 
                 `00:${(index * 5).toString().padStart(2, '0')}`, // Approximate timestamp if not provided
               speaker: entry.role === 'agent' ? 'agent' : 'user',
-              text: entry.message
+              text: String(entry.message)
             };
           }
-          // If already in correct format, keep it
+          // If already in correct format, keep it but ensure text is a string
           if (entry.timestamp && entry.speaker && entry.text) {
-            return entry;
+            // Check if text is actually a JSON object that needs to be extracted
+            if (typeof entry.text === 'object' && entry.text !== null) {
+              // If it's an object, try to extract the message
+              const textObj = entry.text;
+              if (textObj.message !== null && textObj.message !== undefined) {
+                return {
+                  ...entry,
+                  text: String(textObj.message)
+                };
+              } else if (textObj.role && textObj.tool_calls) {
+                // This is a tool call, skip it or show a placeholder
+                return null; // Will be filtered out
+              }
+            }
+            return {
+              ...entry,
+              text: String(entry.text)
+            };
           }
-          // Fallback for any other format
-          return {
-            timestamp: `00:${(index * 5).toString().padStart(2, '0')}`,
-            speaker: 'user',
-            text: JSON.stringify(entry)
-          };
-        });
+          // Handle entries with null message (tool calls, etc) - skip them
+          if (entry.role && (entry.message === null || entry.message === undefined)) {
+            if (entry.tool_calls && entry.tool_calls.length > 0) {
+              // Skip tool call entries
+              return null;
+            }
+          }
+          // Fallback - if we can't parse it properly, skip it
+          return null;
+        }).filter(entry => entry !== null); // Remove null entries
       }
 
       // Prepare the call data - directly insert with custom ID
