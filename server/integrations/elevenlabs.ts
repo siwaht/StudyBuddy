@@ -101,8 +101,30 @@ export class ElevenLabsIntegration {
       // Clean the agent ID
       const cleanAgentId = agentId.trim();
       
-      // Use the SDK to fetch agent
-      const agent = await client.conversationalAi.getAgent(cleanAgentId);
+      // Fetch agent using direct API call
+      const apiKey = await this.getApiKey(accountId);
+      if (!apiKey) {
+        throw new Error('API key not available');
+      }
+      
+      const response = await fetch(
+        `https://api.elevenlabs.io/v1/convai/agents/${cleanAgentId}`,
+        {
+          method: 'GET',
+          headers: {
+            'xi-api-key': apiKey,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        if (response.status === 404) {
+          return null;
+        }
+        throw new Error(`Failed to fetch agent: ${response.statusText}`);
+      }
+
+      const agent = await response.json();
 
       // Update last synced timestamp if we have an accountId
       if (accountId) {
@@ -123,17 +145,34 @@ export class ElevenLabsIntegration {
     try {
       const client = await this.getClient(accountId);
       
-      // Use the SDK to list agents
-      const response = await client.conversationalAi.getAllAgents({
-        page_size: limit,
-      });
+      // List agents using direct API call
+      const apiKey = await this.getApiKey(accountId);
+      if (!apiKey) {
+        throw new Error('API key not available');
+      }
+      
+      const response = await fetch(
+        `https://api.elevenlabs.io/v1/convai/agents?page_size=${limit}`,
+        {
+          method: 'GET',
+          headers: {
+            'xi-api-key': apiKey,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`Failed to list agents: ${response.statusText}`);
+      }
+
+      const data = await response.json();
 
       // Update last synced timestamp if we have an accountId
       if (accountId) {
         await storage.updateAccount(accountId, { lastSynced: new Date() });
       }
 
-      return (response.agents || []) as ElevenLabsAgent[];
+      return (data.agents || []) as ElevenLabsAgent[];
     } catch (error: any) {
       console.error('Error listing agents from ElevenLabs:', error.message);
       throw new Error(`Failed to list agents: ${error.message}`);
@@ -203,12 +242,45 @@ export class ElevenLabsIntegration {
         params.cursor = options.cursor;
       }
 
-      // Use the SDK to fetch conversations
-      const response = await client.conversationalAi.getConversations(params);
+      // Fetch conversations using direct API call
+      const apiKey = await this.getApiKey(accountId);
+      if (!apiKey) {
+        throw new Error('API key not available');
+      }
+      
+      const queryParams = new URLSearchParams();
+      if (params.agent_id) queryParams.append('agent_id', params.agent_id);
+      if (params.page_size) queryParams.append('page_size', params.page_size.toString());
+      if (params.start_time) queryParams.append('start_time', params.start_time.toString());
+      if (params.end_time) queryParams.append('end_time', params.end_time.toString());
+      if (params.cursor) queryParams.append('cursor', params.cursor);
+      
+      const response = await fetch(
+        `https://api.elevenlabs.io/v1/convai/conversations?${queryParams.toString()}`,
+        {
+          method: 'GET',
+          headers: {
+            'xi-api-key': apiKey,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        if (response.status === 404 || response.status === 403) {
+          console.log('Conversations endpoint not available for this agent/account');
+          return {
+            conversations: [],
+            cursor: undefined,
+          };
+        }
+        throw new Error(`Failed to fetch conversations: ${response.statusText}`);
+      }
+
+      const data = await response.json();
 
       return {
-        conversations: (response.conversations || []) as ElevenLabsConversation[],
-        cursor: response.cursor,
+        conversations: (data.conversations || []) as ElevenLabsConversation[],
+        cursor: data.cursor,
       };
     } catch (error: any) {
       // If the endpoint doesn't exist or returns 404, just return empty conversations
@@ -236,8 +308,30 @@ export class ElevenLabsIntegration {
     try {
       const client = await this.getClient(accountId);
       
-      // Use the SDK to fetch conversation details
-      const conversation = await client.conversationalAi.getConversation(conversationId);
+      // Fetch conversation details using direct API call
+      const apiKey = await this.getApiKey(accountId);
+      if (!apiKey) {
+        throw new Error('API key not available');
+      }
+      
+      const response = await fetch(
+        `https://api.elevenlabs.io/v1/convai/conversations/${conversationId}`,
+        {
+          method: 'GET',
+          headers: {
+            'xi-api-key': apiKey,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        if (response.status === 404 || response.status === 403) {
+          return null;
+        }
+        throw new Error(`Failed to fetch conversation: ${response.statusText}`);
+      }
+
+      const conversation = await response.json();
 
       return conversation as ElevenLabsConversation;
     } catch (error: any) {
@@ -295,7 +389,7 @@ export class ElevenLabsIntegration {
           await storage.updateCall(matchingCall.id, {
             recordingUrl: recordingUrl,
             metadata: {
-              ...matchingCall.metadata,
+              ...(matchingCall.metadata as any || {}),
               hasRecording: true,
               recordingProcessed: new Date().toISOString(),
             },

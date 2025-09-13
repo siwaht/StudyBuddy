@@ -174,17 +174,18 @@ class ElevenLabsService {
     toNumber: string;
     fromNumber?: string;
   }): Promise<any> {
-    if (!this.apiKey) {
-      throw new Error("ElevenLabs API key not configured");
+    if (!this.client) {
+      throw new Error("ElevenLabs client not configured");
     }
 
     try {
+      // SDK doesn't have this method, keeping fetch for now
       const response = await fetch(
         "https://api.elevenlabs.io/v1/convai/conversation/initiate_outbound_call",
         {
           method: "POST",
           headers: {
-            "xi-api-key": this.apiKey,
+            "xi-api-key": this.apiKey!,
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
@@ -216,17 +217,18 @@ class ElevenLabsService {
     toNumber: string;
     customHeaders?: Record<string, string>;
   }): Promise<any> {
-    if (!this.apiKey) {
-      throw new Error("ElevenLabs API key not configured");
+    if (!this.client) {
+      throw new Error("ElevenLabs client not configured");
     }
 
     try {
+      // SDK doesn't have this method, keeping fetch for now
       const response = await fetch(
         "https://api.elevenlabs.io/v1/convai/sip-trunk/outbound-call",
         {
           method: "POST",
           headers: {
-            "xi-api-key": this.apiKey,
+            "xi-api-key": this.apiKey!,
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
@@ -257,8 +259,8 @@ class ElevenLabsService {
     twilioAccountSid?: string;
     twilioAuthToken?: string;
   }): Promise<any> {
-    if (!this.apiKey) {
-      throw new Error("ElevenLabs API key not configured");
+    if (!this.client) {
+      throw new Error("ElevenLabs client not configured");
     }
 
     try {
@@ -272,12 +274,13 @@ class ElevenLabsService {
         body.twilio_auth_token = params.twilioAuthToken;
       }
 
+      // SDK doesn't have this method, keeping fetch for now
       const response = await fetch(
         "https://api.elevenlabs.io/v1/convai/phone-numbers/register",
         {
           method: "POST",
           headers: {
-            "xi-api-key": this.apiKey,
+            "xi-api-key": this.apiKey!,
             "Content-Type": "application/json",
           },
           body: JSON.stringify(body),
