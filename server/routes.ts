@@ -757,6 +757,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Invalid service" });
       }
       
+      // Validate that the user isn't entering an agent ID instead of an API key
+      if (service === 'elevenlabs' && apiKey.startsWith('agent_')) {
+        return res.status(400).json({ 
+          message: "Invalid API key format",
+          error: "You entered an Agent ID instead of an API key. ElevenLabs API keys start with 'sk_' or 'xi-'. Find your API key at https://elevenlabs.io/app/settings/api-keys"
+        });
+      }
+      
       // Encrypt the API key before storing
       const encryptedKey = encrypt(apiKey);
       

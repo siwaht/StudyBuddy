@@ -416,7 +416,7 @@ export default function Agents() {
                       </SelectItem>
                     ))}
                   {accounts.filter(a => a.service === importForm.platform && a.isActive).length === 0 && (
-                    <SelectItem value="" disabled>
+                    <SelectItem value="no-accounts" disabled>
                       No active {importForm.platform === 'elevenlabs' ? 'ElevenLabs' : 'LiveKit'} accounts found
                     </SelectItem>
                   )}

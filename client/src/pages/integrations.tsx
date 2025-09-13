@@ -142,6 +142,17 @@ export default function Integrations() {
 
   const handleSubmitCreate = () => {
     if (!accountName.trim() || !selectedService || !apiKey.trim()) return;
+    
+    // Validate that the user isn't entering an agent ID instead of an API key
+    if (selectedService === 'elevenlabs' && apiKey.startsWith('agent_')) {
+      toast({
+        title: "Invalid API Key",
+        description: "You entered an Agent ID instead of an API key. ElevenLabs API keys start with 'sk_' or 'xi-'. Find your API key at https://elevenlabs.io/app/settings/api-keys",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     createAccountMutation.mutate({ name: accountName, service: selectedService, apiKey });
   };
 
@@ -376,26 +387,32 @@ export default function Integrations() {
               <Input
                 id="api-key"
                 type="password"
-                placeholder={selectedService === 'livekit' ? "Format: apiKey:apiSecret" : "Enter your API key..."}
+                placeholder={selectedService === 'livekit' ? "Format: apiKey:apiSecret" : "sk_xxx... or xi-xxx... (NOT agent_xxx)"}
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
                 data-testid="input-api-key"
               />
             </div>
             {selectedService === 'elevenlabs' && (
-              <Alert>
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>
-                  You can find your ElevenLabs API key in your{" "}
-                  <a
-                    href="https://elevenlabs.io/api"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="underline"
-                  >
-                    ElevenLabs dashboard
-                  </a>
-                  .
+              <Alert className="border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800">
+                <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                <AlertDescription className="text-amber-900 dark:text-amber-100">
+                  <div className="space-y-2">
+                    <p><strong>⚠️ Important:</strong> Enter your API Key, not your Agent ID!</p>
+                    <p className="text-sm">• API Keys start with "sk_" or "xi-"</p>
+                    <p className="text-sm">• Agent IDs start with "agent_" and go in the Agent Import dialog</p>
+                    <p className="text-sm mt-2">
+                      Find your API key at:{" "}
+                      <a
+                        href="https://elevenlabs.io/app/settings/api-keys"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="underline font-medium"
+                      >
+                        ElevenLabs Settings → API Keys
+                      </a>
+                    </p>
+                  </div>
                 </AlertDescription>
               </Alert>
             )}
