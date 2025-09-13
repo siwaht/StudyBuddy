@@ -1500,6 +1500,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
       
+      // Check if ElevenLabs API is configured
+      if (!elevenlabsService.isConfigured()) {
+        return res.status(400).json({ 
+          message: "ElevenLabs API key not configured. Please add ELEVENLABS_API_KEY to your environment variables." 
+        });
+      }
+      
       // Create playground session record
       const session = await storage.createPlaygroundSession({
         agentId,
@@ -1513,13 +1520,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         },
       });
       
-      // For public agents, return the agent ID directly
-      // For private agents, you would generate a signed URL here
+      // Note: Direct WebSocket connection requires proper authentication
+      // This would need to be implemented with:
+      // 1. Signed URLs for private agents (using ElevenLabs API)
+      // 2. Or proper WebSocket authentication headers
+      // For now, direct users to test on the ElevenLabs platform
+      
       res.json({
         sessionId: session.id,
         agentId: agent.externalId,
-        // signedUrl: would be generated for private agents
-        message: "Playground session started",
+        message: "Session created. Please test your agent on the ElevenLabs platform directly.",
+        note: "Direct WebSocket connection requires additional authentication implementation."
       });
     } catch (error: any) {
       console.error('Error starting playground session:', error);

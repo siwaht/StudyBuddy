@@ -92,6 +92,28 @@ export default function Playground() {
     try {
       setSessionStatus("connecting");
       
+      // Check if ElevenLabs API is configured first
+      const apiKeyResponse = await fetch('/api/elevenlabs/agents');
+      if (!apiKeyResponse.ok) {
+        // API not configured, show error
+        setSessionStatus("error");
+        toast({
+          title: "Configuration Required",
+          description: "Please configure your ElevenLabs API key to use the playground. Add ELEVENLABS_API_KEY to your environment variables.",
+          variant: "destructive",
+        });
+        
+        // Add message to transcript
+        const entry: TranscriptEntry = {
+          speaker: 'agent',
+          text: 'ElevenLabs API key not configured. Please add your API key to enable the playground.',
+          timestamp: new Date().toLocaleTimeString(),
+        };
+        setTranscript([entry]);
+        
+        return;
+      }
+      
       // Request microphone permission
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -110,102 +132,30 @@ export default function Playground() {
       // Create audio context
       audioContextRef.current = new AudioContext();
       
-      // Check if we need to get a signed URL for private agents
-      let connectionUrl = signedUrlOrAgentId;
+      // For now, show a message that direct WebSocket connection is not yet implemented
+      // This would require either:
+      // 1. A signed URL from the backend (for private agents)
+      // 2. Or using the ElevenLabs JavaScript SDK with proper authentication
       
-      // If it's not already a WebSocket URL, build one
-      if (!connectionUrl.startsWith('wss://')) {
-        // Check if ElevenLabs API is configured
-        const apiKeyResponse = await fetch('/api/elevenlabs/agents');
-        if (!apiKeyResponse.ok) {
-          // API not configured, use demo mode
-          setIsConnected(true);
-          setSessionStatus("connected");
-          sessionStartTimeRef.current = Date.now();
-          
-          // Start duration timer
-          durationIntervalRef.current = setInterval(() => {
-            if (sessionStartTimeRef.current) {
-              setDuration(Math.floor((Date.now() - sessionStartTimeRef.current) / 1000));
-            }
-          }, 1000);
-          
-          toast({
-            title: "Demo Mode",
-            description: "ElevenLabs API key not configured. Add ELEVENLABS_API_KEY to enable real conversations.",
-          });
-          
-          // Add demo message
-          setTimeout(() => {
-            const entry: TranscriptEntry = {
-              speaker: 'agent',
-              text: 'Demo mode active. Configure ElevenLabs API key to enable real conversations.',
-              timestamp: new Date().toLocaleTimeString(),
-            };
-            setTranscript([entry]);
-            setLatency(150);
-          }, 500);
-          
-          return;
-        }
-        
-        // Build WebSocket URL for public agent
-        connectionUrl = `wss://api.elevenlabs.io/v1/convai/conversation?agent_id=${signedUrlOrAgentId}`;
-      }
+      setSessionStatus("error");
+      toast({
+        title: "Coming Soon",
+        description: "Direct agent testing is being implemented. Please use the ElevenLabs platform directly for now.",
+        variant: "default",
+      });
       
-      // Connect via WebSocket
-      const ws = new WebSocket(connectionUrl);
-      wsRef.current = ws;
-      
-      ws.onopen = () => {
-        setIsConnected(true);
-        setSessionStatus("connected");
-        sessionStartTimeRef.current = Date.now();
-        
-        // Start duration timer
-        durationIntervalRef.current = setInterval(() => {
-          if (sessionStartTimeRef.current) {
-            setDuration(Math.floor((Date.now() - sessionStartTimeRef.current) / 1000));
-          }
-        }, 1000);
-        
-        toast({
-          title: "Connected",
-          description: "Connected to ElevenLabs agent",
-        });
-        
-        // Send initial audio setup
-        if (mediaStreamRef.current) {
-          // Set up audio streaming here
-        }
+      // Add message to transcript
+      const entry: TranscriptEntry = {
+        speaker: 'agent',
+        text: 'The playground WebSocket connection is being implemented. You can test your agents directly on the ElevenLabs platform.',
+        timestamp: new Date().toLocaleTimeString(),
       };
+      setTranscript([entry]);
       
-      ws.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          handleWebSocketMessage(data);
-        } catch (error) {
-          console.error('Error parsing message:', error);
-        }
-      };
-      
-      ws.onerror = (error) => {
-        console.error('WebSocket error:', error);
-        setSessionStatus("error");
-        toast({
-          title: "Connection Error",
-          description: "Failed to connect to agent",
-          variant: "destructive",
-        });
-      };
-      
-      ws.onclose = () => {
-        setIsConnected(false);
-        setSessionStatus("disconnected");
-        if (durationIntervalRef.current) {
-          clearInterval(durationIntervalRef.current);
-        }
-      };
+      return;
+      // Future implementation: Connect via WebSocket with proper authentication
+      // This would require implementing signed URL generation in the backend
+      // or using the ElevenLabs JavaScript SDK with authentication
       
       
     } catch (error: any) {
@@ -408,7 +358,9 @@ export default function Playground() {
                 <Alert>
                   <AlertCircle className="h-4 w-4" />
                   <AlertDescription>
-                    Click "Start Session" to begin testing this agent
+                    <strong>Note:</strong> ElevenLabs API key required.
+                    <br />
+                    Test your agents on <a href="https://elevenlabs.io" target="__blank" rel="noopener noreferrer" className="underline">ElevenLabs platform</a> for now.
                   </AlertDescription>
                 </Alert>
               )}
