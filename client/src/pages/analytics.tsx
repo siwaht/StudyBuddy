@@ -492,7 +492,8 @@ export default function Analytics() {
                         if (percent < 0.05) return null;
                         
                         const RADIAN = Math.PI / 180;
-                        const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
+                        // Place labels outside the donut for better visibility
+                        const radius = outerRadius + 20;
                         const x = cx + radius * Math.cos(-midAngle * RADIAN);
                         const y = cy + radius * Math.sin(-midAngle * RADIAN);
                         
@@ -500,8 +501,8 @@ export default function Analytics() {
                           <text
                             x={x}
                             y={y}
-                            fill="white"
-                            textAnchor={x > cx ? 'start' : 'end'}
+                            fill="currentColor"
+                            textAnchor="middle"
                             dominantBaseline="central"
                             className="fill-current font-medium text-xs"
                           >
