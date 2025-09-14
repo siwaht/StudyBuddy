@@ -408,39 +408,6 @@ export default function Agents() {
         </div>
       )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Quick Info</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="space-y-2">
-              <h4 className="font-semibold flex items-center gap-2">
-                <Bot className="h-4 w-4" />
-                ElevenLabs Agents
-              </h4>
-              <p className="text-sm text-muted-foreground">
-                Import conversational AI agents from ElevenLabs with advanced voice synthesis and natural conversation flow.
-              </p>
-              <p className="text-xs text-muted-foreground">
-                Requires ElevenLabs API key configured in Integrations
-              </p>
-            </div>
-            <div className="space-y-2">
-              <h4 className="font-semibold flex items-center gap-2">
-                <Bot className="h-4 w-4" />
-                LiveKit Agents
-              </h4>
-              <p className="text-sm text-muted-foreground">
-                Connect real-time audio streaming agents from LiveKit for low-latency voice interactions.
-              </p>
-              <p className="text-xs text-muted-foreground">
-                Requires LiveKit API key configured in Integrations
-              </p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
       
       {/* Import Agent Dialog */}
       <Dialog open={isImportAgentOpen} onOpenChange={(open) => {
