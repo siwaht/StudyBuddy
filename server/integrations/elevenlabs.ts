@@ -75,7 +75,6 @@ export class ElevenLabsIntegration {
 
       return apiKey;
     } catch (error) {
-      console.error('Failed to get ElevenLabs API key:', error);
       return null;
     }
   }
@@ -104,7 +103,6 @@ export class ElevenLabsIntegration {
       // Fetch agent using direct API call
       const apiKey = await this.getApiKey(accountId);
       if (!apiKey) {
-        console.error('No API key available for ElevenLabs account:', accountId);
         throw new Error('API key not available');
       }
       
@@ -123,11 +121,11 @@ export class ElevenLabsIntegration {
           return null;
         }
         if (response.status === 401) {
-          console.error('ElevenLabs API unauthorized for account:', accountId);
+
           throw new Error('Invalid ElevenLabs API key. Please check your API key in Integrations.');
         }
         const errorText = await response.text();
-        console.error('ElevenLabs API error:', response.status, errorText);
+
         throw new Error(`Failed to fetch agent: ${response.status} ${response.statusText}`);
       }
 
@@ -143,7 +141,6 @@ export class ElevenLabsIntegration {
       if (error.statusCode === 404) {
         return null;
       }
-      console.error('Error fetching agent from ElevenLabs:', error.message);
       throw new Error(`Failed to fetch agent: ${error.message}`);
     }
   }
@@ -170,11 +167,11 @@ export class ElevenLabsIntegration {
 
       if (!response.ok) {
         if (response.status === 401) {
-          console.error('ElevenLabs API unauthorized for account:', accountId);
+
           throw new Error('Invalid ElevenLabs API key. Please check your API key in Integrations.');
         }
         const errorText = await response.text();
-        console.error('ElevenLabs API error:', response.status, errorText);
+
         throw new Error(`Failed to list agents: ${response.status} ${response.statusText}`);
       }
 
@@ -187,7 +184,6 @@ export class ElevenLabsIntegration {
 
       return (data.agents || []) as ElevenLabsAgent[];
     } catch (error: any) {
-      console.error('Error listing agents from ElevenLabs:', error.message);
       throw new Error(`Failed to list agents: ${error.message}`);
     }
   }
@@ -197,7 +193,6 @@ export class ElevenLabsIntegration {
       // Get the API key directly to test it
       const apiKey = await this.getApiKey(accountId);
       if (!apiKey) {
-        console.error('No API key available for testing');
         return false;
       }
       
@@ -210,17 +205,14 @@ export class ElevenLabsIntegration {
       });
       
       if (!response.ok) {
-        console.error(`ElevenLabs API test failed with status: ${response.status}`);
         return false;
       }
       
       // Parse the response to ensure it's valid JSON
       const userData = await response.json();
-      console.log('ElevenLabs connection test successful, user:', userData.xi_api_key ? 'API key owner found' : 'Unknown user');
       
       return true;
     } catch (error: any) {
-      console.error('ElevenLabs connection test failed:', error.message || error);
       return false;
     }
   }
