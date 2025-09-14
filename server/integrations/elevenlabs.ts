@@ -104,6 +104,7 @@ export class ElevenLabsIntegration {
       // Fetch agent using direct API call
       const apiKey = await this.getApiKey(accountId);
       if (!apiKey) {
+        console.error('No API key available for ElevenLabs account:', accountId);
         throw new Error('API key not available');
       }
       
@@ -121,7 +122,13 @@ export class ElevenLabsIntegration {
         if (response.status === 404) {
           return null;
         }
-        throw new Error(`Failed to fetch agent: ${response.statusText}`);
+        if (response.status === 401) {
+          console.error('ElevenLabs API unauthorized for account:', accountId);
+          throw new Error('Invalid ElevenLabs API key. Please check your API key in Integrations.');
+        }
+        const errorText = await response.text();
+        console.error('ElevenLabs API error:', response.status, errorText);
+        throw new Error(`Failed to fetch agent: ${response.status} ${response.statusText}`);
       }
 
       const agent = await response.json();
