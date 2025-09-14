@@ -10,7 +10,7 @@ interface ChartsProps {
 export default function Charts({ stats }: ChartsProps) {
   const performanceMetrics = [
     { label: "Response Time", value: 95, percentage: 85, color: "bg-green-500" },
-    { label: "Success Rate", value: "98.5%", percentage: 98, color: "bg-primary" },
+    { label: "Success Rate", value: "98.5%", percentage: 98, color: "bg-emerald-500" },
     { label: "Audio Quality", value: "4.6/5", percentage: 92, color: "bg-blue-500" },
   ];
 
