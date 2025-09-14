@@ -132,10 +132,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const stats = await storage.getDashboardStats(req.user!.id);
       
-      // Set cache headers for dashboard stats (cache for 1 minute)
+      // Set cache headers for dashboard stats (cache for 30 seconds)
       res.set({
-        'Cache-Control': 'private, max-age=60',
-        'Vary': 'Authorization'
+        'Cache-Control': 'private, max-age=30, stale-while-revalidate=60',
+        'Vary': 'Authorization',
+        'ETag': `W/"${Date.now()}"`,
       });
       
       res.json(stats);
@@ -417,10 +418,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const agents = await storage.getAllAgents(req.user!.id);
       
-      // Set cache headers for agents list (cache for 5 minutes)
+      // Set cache headers for agents list (cache for 2 minutes with stale-while-revalidate)
       res.set({
-        'Cache-Control': 'private, max-age=300',
-        'Vary': 'Authorization'
+        'Cache-Control': 'private, max-age=120, stale-while-revalidate=180',
+        'Vary': 'Authorization',
+        'ETag': `W/"agents-${req.user!.id}-${Date.now()}"`,
       });
       
       res.json(agents);
@@ -505,10 +507,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         agent: agentsMap.get(call.agentId),
       }));
       
-      // Set cache headers for calls list (cache for 30 seconds - since calls update frequently)
+      // Set cache headers for calls list (short cache with stale-while-revalidate for better performance)
       res.set({
-        'Cache-Control': 'private, max-age=30',
-        'Vary': 'Authorization'
+        'Cache-Control': 'private, max-age=15, stale-while-revalidate=45',
+        'Vary': 'Authorization',
+        'ETag': `W/"calls-${req.user!.id}-${Date.now()}"`,
       });
       
       res.json(callsWithAgents);
