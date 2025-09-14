@@ -108,16 +108,6 @@ export function LoginPage() {
                 "Sign In"
               )}
             </Button>
-
-            <div className="mt-4 text-center text-sm text-muted-foreground">
-              <p>Demo Credentials:</p>
-              <p className="mt-1">
-                Admin: alice@company.com / password123
-              </p>
-              <p>
-                User: bob@company.com / password123
-              </p>
-            </div>
           </form>
         </CardContent>
       </Card>
