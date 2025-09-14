@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, timestamp, integer, decimal, jsonb, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, timestamp, integer, decimal, jsonb, boolean, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -25,6 +25,12 @@ export const agents = pgTable("agents", {
   metadata: jsonb("metadata"), // Store platform-specific metadata
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
+}, (table) => {
+  return {
+    accountIdIdx: index("agents_account_id_idx").on(table.accountId),
+    isActiveIdx: index("agents_is_active_idx").on(table.isActive),
+    platformIdx: index("agents_platform_idx").on(table.platform),
+  };
 });
 
 export const calls = pgTable("calls", {
@@ -40,6 +46,13 @@ export const calls = pgTable("calls", {
   analysis: jsonb("analysis"), // AI analysis data
   metadata: jsonb("metadata"), // platform-specific metadata
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
+}, (table) => {
+  return {
+    agentIdIdx: index("calls_agent_id_idx").on(table.agentId),
+    startTimeIdx: index("calls_start_time_idx").on(table.startTime),
+    createdAtIdx: index("calls_created_at_idx").on(table.createdAt),
+    sentimentIdx: index("calls_sentiment_idx").on(table.sentiment),
+  };
 });
 
 export const performanceMetrics = pgTable("performance_metrics", {
@@ -54,6 +67,12 @@ export const performanceMetrics = pgTable("performance_metrics", {
   audioQuality: decimal("audio_quality", { precision: 3, scale: 2 }),
   successRate: decimal("success_rate", { precision: 5, scale: 4 }),
   timestamp: timestamp("timestamp").notNull().default(sql`now()`),
+}, (table) => {
+  return {
+    agentIdIdx: index("performance_metrics_agent_id_idx").on(table.agentId),
+    callIdIdx: index("performance_metrics_call_id_idx").on(table.callId),
+    timestampIdx: index("performance_metrics_timestamp_idx").on(table.timestamp),
+  };
 });
 
 export const liveKitRooms = pgTable("livekit_rooms", {
@@ -74,6 +93,8 @@ export const userAgents = pgTable("user_agents", {
 }, (table) => {
   return {
     uniqueUserAgent: sql`UNIQUE(user_id, agent_id)`,
+    userIdIdx: index("user_agents_user_id_idx").on(table.userId),
+    agentIdIdx: index("user_agents_agent_id_idx").on(table.agentId),
   };
 });
 
@@ -100,6 +121,11 @@ export const syncHistory = pgTable("sync_history", {
   errorMessage: text("error_message"),
   startedAt: timestamp("started_at").notNull().default(sql`now()`),
   completedAt: timestamp("completed_at"),
+}, (table) => {
+  return {
+    agentIdIdx: index("sync_history_agent_id_idx").on(table.agentId),
+    statusIdx: index("sync_history_status_idx").on(table.status),
+  };
 });
 
 // Playground sessions for testing agents
@@ -125,6 +151,11 @@ export const accounts = pgTable("accounts", {
   metadata: jsonb("metadata"), // Account-specific info like workspace name
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
   updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+}, (table) => {
+  return {
+    serviceIdx: index("accounts_service_idx").on(table.service),
+    isActiveIdx: index("accounts_is_active_idx").on(table.isActive),
+  };
 });
 
 // Insert schemas
