@@ -927,13 +927,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
       
-      // Validate ElevenLabs API key format
+      // Basic validation for ElevenLabs API key format
       if (service === 'elevenlabs') {
         const cleanedKey = apiKey.trim();
-        if (cleanedKey.length < 20 || (!cleanedKey.startsWith('sk_') && !cleanedKey.startsWith('xi-'))) {
+        if (cleanedKey.length < 10 || /\s/.test(cleanedKey) || cleanedKey.length > 200) {
           return res.status(400).json({
             message: "Invalid ElevenLabs API key format",
-            error: "ElevenLabs API keys should be longer than 20 characters and start with 'sk_' or 'xi-'. Please copy the full API key from https://elevenlabs.io/app/settings/api-keys"
+            error: "API key should be 10-200 characters with no spaces. Please copy the full API key from https://elevenlabs.io/app/settings/api-keys"
           });
         }
       }

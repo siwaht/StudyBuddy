@@ -169,7 +169,13 @@ export class ElevenLabsIntegration {
       );
 
       if (!response.ok) {
-        throw new Error(`Failed to list agents: ${response.statusText}`);
+        if (response.status === 401) {
+          console.error('ElevenLabs API unauthorized for account:', accountId);
+          throw new Error('Invalid ElevenLabs API key. Please check your API key in Integrations.');
+        }
+        const errorText = await response.text();
+        console.error('ElevenLabs API error:', response.status, errorText);
+        throw new Error(`Failed to list agents: ${response.status} ${response.statusText}`);
       }
 
       const data = await response.json();
