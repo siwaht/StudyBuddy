@@ -942,6 +942,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Test the connection based on service
       if (service === 'elevenlabs') {
+        console.log('Testing ElevenLabs connection for account:', account.id);
         const testResult = await elevenLabsIntegration.testConnection(account.id);
         if (!testResult) {
           // Delete the account if connection test fails
@@ -951,6 +952,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             hint: "You can find your API key at https://elevenlabs.io/app/settings/api-keys" 
           });
         }
+        console.log('ElevenLabs connection test passed for account:', account.id);
       } else if (service === 'livekit') {
         // For LiveKit, validate that the key contains both API key and secret
         if (!apiKey.includes(':')) {
@@ -971,9 +973,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
           isActive: account.isActive,
         }
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error creating account:', error);
-      res.status(500).json({ message: "Failed to create account" });
+      console.error('Error details:', error.stack);
+      res.status(500).json({ 
+        message: "Failed to create account",
+        error: error.message || "An unexpected error occurred"
+      });
     }
   });
 

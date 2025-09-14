@@ -181,13 +181,33 @@ export class ElevenLabsIntegration {
 
   async testConnection(accountId?: string): Promise<boolean> {
     try {
-      const client = await this.getClient(accountId);
+      // Get the API key directly to test it
+      const apiKey = await this.getApiKey(accountId);
+      if (!apiKey) {
+        console.error('No API key available for testing');
+        return false;
+      }
       
-      // Try to fetch user info to test the connection
-      await client.user.get();
+      // Test the API key by making a simple API call to get user info
+      const response = await fetch('https://api.elevenlabs.io/v1/user', {
+        method: 'GET',
+        headers: {
+          'xi-api-key': apiKey,
+        },
+      });
+      
+      if (!response.ok) {
+        console.error(`ElevenLabs API test failed with status: ${response.status}`);
+        return false;
+      }
+      
+      // Parse the response to ensure it's valid JSON
+      const userData = await response.json();
+      console.log('ElevenLabs connection test successful, user:', userData.xi_api_key ? 'API key owner found' : 'Unknown user');
+      
       return true;
-    } catch (error) {
-      console.error('ElevenLabs connection test failed:', error);
+    } catch (error: any) {
+      console.error('ElevenLabs connection test failed:', error.message || error);
       return false;
     }
   }
