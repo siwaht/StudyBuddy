@@ -1,23 +1,26 @@
+import { lazy, Suspense } from "react";
 import { Switch, Route, Redirect } from "wouter";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClient } from "./lib/queryClient";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
-import Dashboard from "@/pages/dashboard";
-import CallDetail from "@/pages/call-detail";
-import UserManagement from "@/pages/user-management";
-import Calls from "@/pages/calls";
-import Agents from "@/pages/agents";
-import Analytics from "@/pages/analytics";
-import Settings from "@/pages/settings";
-import Integrations from "@/pages/integrations";
-import NotFound from "@/pages/not-found";
-import { LoginPage } from "@/pages/login";
 import Sidebar from "@/components/layout/sidebar";
 import Header from "@/components/layout/header";
 import { Loader2 } from "lucide-react";
 import { ScrollToTop } from "@/components/ui/scroll-to-top";
+
+// Lazy load pages for better performance
+const Dashboard = lazy(() => import("@/pages/dashboard"));
+const CallDetail = lazy(() => import("@/pages/call-detail"));
+const UserManagement = lazy(() => import("@/pages/user-management"));
+const Calls = lazy(() => import("@/pages/calls"));
+const Agents = lazy(() => import("@/pages/agents"));
+const Analytics = lazy(() => import("@/pages/analytics"));
+const Settings = lazy(() => import("@/pages/settings"));
+const Integrations = lazy(() => import("@/pages/integrations"));
+const NotFound = lazy(() => import("@/pages/not-found"));
+const LoginPage = lazy(() => import("@/pages/login").then(module => ({ default: module.LoginPage })));
 
 // Protected route component
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -61,57 +64,66 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+// Loading component for Suspense
+const PageLoader = () => (
+  <div className="flex items-center justify-center h-full min-h-[400px]">
+    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+  </div>
+);
+
 function Router() {
   return (
-    <Switch>
-      <Route path="/login" component={LoginPage} />
-      <Route path="/">
-        <ProtectedRoute>
-          <Dashboard />
-        </ProtectedRoute>
-      </Route>
-      <Route path="/dashboard">
-        <ProtectedRoute>
-          <Dashboard />
-        </ProtectedRoute>
-      </Route>
-      <Route path="/calls">
-        <ProtectedRoute>
-          <Calls />
-        </ProtectedRoute>
-      </Route>
-      <Route path="/calls/:id">
-        <ProtectedRoute>
-          <CallDetail />
-        </ProtectedRoute>
-      </Route>
-      <Route path="/agents">
-        <ProtectedRoute>
-          <Agents />
-        </ProtectedRoute>
-      </Route>
-      <Route path="/analytics">
-        <ProtectedRoute>
-          <Analytics />
-        </ProtectedRoute>
-      </Route>
-      <Route path="/user-management">
-        <AdminRoute>
-          <UserManagement />
-        </AdminRoute>
-      </Route>
-      <Route path="/integrations">
-        <AdminRoute>
-          <Integrations />
-        </AdminRoute>
-      </Route>
-      <Route path="/settings">
-        <ProtectedRoute>
-          <Settings />
-        </ProtectedRoute>
-      </Route>
-      <Route component={NotFound} />
-    </Switch>
+    <Suspense fallback={<PageLoader />}>
+      <Switch>
+        <Route path="/login" component={LoginPage} />
+        <Route path="/">
+          <ProtectedRoute>
+            <Dashboard />
+          </ProtectedRoute>
+        </Route>
+        <Route path="/dashboard">
+          <ProtectedRoute>
+            <Dashboard />
+          </ProtectedRoute>
+        </Route>
+        <Route path="/calls">
+          <ProtectedRoute>
+            <Calls />
+          </ProtectedRoute>
+        </Route>
+        <Route path="/calls/:id">
+          <ProtectedRoute>
+            <CallDetail />
+          </ProtectedRoute>
+        </Route>
+        <Route path="/agents">
+          <ProtectedRoute>
+            <Agents />
+          </ProtectedRoute>
+        </Route>
+        <Route path="/analytics">
+          <ProtectedRoute>
+            <Analytics />
+          </ProtectedRoute>
+        </Route>
+        <Route path="/user-management">
+          <AdminRoute>
+            <UserManagement />
+          </AdminRoute>
+        </Route>
+        <Route path="/integrations">
+          <AdminRoute>
+            <Integrations />
+          </AdminRoute>
+        </Route>
+        <Route path="/settings">
+          <ProtectedRoute>
+            <Settings />
+          </ProtectedRoute>
+        </Route>
+        <Route component={NotFound} />
+      </Switch>
+    </Suspense>
   );
 }
 
