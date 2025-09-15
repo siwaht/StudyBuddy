@@ -183,7 +183,7 @@ class ElevenLabsService {
     try {
       console.log(`[ElevenLabs] Fetching conversation ${conversationId} from API`);
       const response = await fetch(
-        `https://api.elevenlabs.io/v1/convai/conversations/${conversationId}`,
+        `https://api.elevenlabs.io/v1/conversational-ai/conversation/${conversationId}`,
         {
           method: "GET",
           headers: {
@@ -217,7 +217,7 @@ class ElevenLabsService {
     }
 
     try {
-      let url = `https://api.elevenlabs.io/v1/convai/conversations?page_size=${limit}`;
+      let url = `https://api.elevenlabs.io/v1/conversational-ai/conversations?page_size=${limit}`;
       if (agentId) {
         url += `&agent_id=${agentId}`;
       }
@@ -258,8 +258,8 @@ class ElevenLabsService {
       }
 
       // Use the documented ElevenLabs endpoint for audio retrieval
-      // According to docs: GET /v1/convai/conversations/{conversation_id}/audio
-      const audioUrl = `https://api.elevenlabs.io/v1/convai/conversations/${conversationId}/audio`;
+      // According to docs: GET /v1/conversational-ai/conversation/{conversation_id}/audio
+      const audioUrl = `https://api.elevenlabs.io/v1/conversational-ai/conversation/${conversationId}/audio`;
       
       console.log(`[ElevenLabs] Fetching audio from: ${audioUrl}`);
       
