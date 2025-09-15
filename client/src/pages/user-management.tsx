@@ -50,9 +50,9 @@ export default function UserManagement() {
     queryKey: ["/api/users"],
   });
 
-  // Fetch all agents for the assignment dropdown
+  // Fetch all agents for the assignment dropdown (admin view)
   const { data: agents } = useQuery<Agent[]>({
-    queryKey: ["/api/agents"],
+    queryKey: ["/api/all-agents"],
   });
 
   // Create user mutation

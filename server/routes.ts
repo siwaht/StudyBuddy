@@ -406,7 +406,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/all-agents", requireAuth, requireAdmin, async (req: Request, res: Response) => {
     try {
       // For admins to see all agents when assigning
-      const agents = await storage.getAllAgents(req.user!.id);
+      const agents = await storage.getAllSystemAgents(req.user!.id);
       res.json(agents);
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch all agents" });
