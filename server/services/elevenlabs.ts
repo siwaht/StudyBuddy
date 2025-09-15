@@ -251,37 +251,14 @@ class ElevenLabsService {
 
     try {
       // First, check if the conversation has audio available
-      const conversation = await this.getConversation(conversationId, accountId);
-      if (!conversation) {
-        console.error(`[ElevenLabs] Conversation ${conversationId} not found`);
+      const hasAudio = await this.hasConversationAudio(conversationId, accountId);
+      if (!hasAudio) {
+        console.log(`[ElevenLabs] No audio available for conversation ${conversationId} based on has_audio fields`);
         return null;
       }
 
-      // Check if conversation has a recording_url field (preferred method)
-      if (conversation.recording_url) {
-        console.log(`[ElevenLabs] Using recording_url from conversation: ${conversation.recording_url}`);
-        const response = await fetch(conversation.recording_url, {
-          method: "GET",
-          headers: {
-            "xi-api-key": apiKey,
-          },
-        });
-        
-        if (response.ok) {
-          const audioBuffer = await response.arrayBuffer();
-          console.log(`[ElevenLabs] Successfully fetched audio from recording_url, size: ${audioBuffer.byteLength} bytes`);
-          return Buffer.from(audioBuffer);
-        }
-      }
-
-      // Check if audio is available (this field may be present in the conversation response)
-      if (conversation.has_audio === false && conversation.has_response_audio === false) {
-        console.log(`[ElevenLabs] No audio available for conversation ${conversationId} - has_audio and has_response_audio are false`);
-        return null;
-      }
-
-      // Try the correct ElevenLabs endpoint for audio retrieval
-      // Note: The /audio endpoint doesn't need format parameter for MP3
+      // Use the documented ElevenLabs endpoint for audio retrieval
+      // According to docs: GET /v1/convai/conversations/{conversation_id}/audio
       const audioUrl = `https://api.elevenlabs.io/v1/convai/conversations/${conversationId}/audio`;
       
       console.log(`[ElevenLabs] Fetching audio from: ${audioUrl}`);
@@ -301,6 +278,11 @@ class ElevenLabsService {
         try {
           const errorText = await response.text();
           console.error(`[ElevenLabs] Error response: ${errorText}`);
+          
+          // If it's a 404, the audio might not be ready yet
+          if (response.status === 404) {
+            console.log(`[ElevenLabs] Audio not found for conversation ${conversationId} - it may not be ready yet or may have been deleted`);
+          }
         } catch (e) {
           console.error('[ElevenLabs] Could not read error response');
         }
@@ -332,27 +314,21 @@ class ElevenLabsService {
         return false;
       }
 
-      // Enhanced debug logging for production
+      // Debug logging for production - only check documented fields
       console.log(`[ElevenLabs] Conversation ${conversationId} audio check:`, {
-        has_recording_url: !!conversation.recording_url,
         has_audio: conversation.has_audio,
         has_user_audio: conversation.has_user_audio,
         has_response_audio: conversation.has_response_audio,
         status: conversation.status,
         phase: conversation.phase,
-        ended_at: conversation.ended_at,
-        available_audio_fields: Object.keys(conversation).filter(k => k.toLowerCase().includes('audio') || k.toLowerCase().includes('recording') || k.toLowerCase().includes('media'))
+        ended_at: conversation.ended_at
       });
 
-      // Check multiple fields for audio availability
-      // ElevenLabs may have changed their API response structure
-      const hasAudio = !!(conversation.recording_url || 
-                         conversation.audio_url || 
-                         conversation.audio_file || 
-                         conversation.media?.audio || 
-                         conversation.has_audio === true ||
-                         conversation.has_response_audio === true ||
-                         conversation.has_user_audio === true);
+      // According to ElevenLabs documentation, these are the only audio availability fields
+      // has_audio is the primary indicator that audio is available
+      const hasAudio = conversation.has_audio === true || 
+                      conversation.has_response_audio === true ||
+                      conversation.has_user_audio === true;
       
       console.log(`[ElevenLabs] Conversation ${conversationId} hasAudio result: ${hasAudio}`);
       return hasAudio;
