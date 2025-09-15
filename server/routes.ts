@@ -615,10 +615,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (call.id.startsWith('EL-') && !recordingUrl && elevenlabsService.isConfigured()) {
         const conversationId = call.id.replace('EL-', '');
         
-        // Get the account ID for this agent
-        const accounts = await storage.getAccountsByService('elevenlabs');
-        const account = accounts.find((a: any) => a.isActive);
-        const accountId = account?.id;
+        // Use the agent's specific account ID if available
+        let accountId: string | undefined;
+        if (agent?.accountId) {
+          accountId = agent.accountId;
+        } else {
+          // Fallback to first active account if agent has no specific account
+          const accounts = await storage.getAccountsByService('elevenlabs');
+          const account = accounts.find((a: any) => a.isActive);
+          accountId = account?.id;
+        }
         
         // Check if audio is actually available before providing the URL
         const hasAudio = await elevenlabsService.hasConversationAudio(conversationId, accountId);
@@ -658,11 +664,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const conversationId = call.id.replace('EL-', '');
       
-      // Get the account ID for this agent
+      // Get the agent and its associated account ID
       const agent = await storage.getAgent(req.user!.id, call.agentId);
-      const accounts = await storage.getAccountsByService('elevenlabs');
-      const account = accounts.find((a: any) => a.isActive);
-      const accountId = account?.id;
+      let accountId: string | undefined;
+      
+      // Use the agent's specific account ID if available
+      if (agent?.accountId) {
+        accountId = agent.accountId;
+        console.log(`Using agent's specific account ID: ${accountId} for agent: ${agent.name}`);
+      } else {
+        // Fallback to first active account if agent has no specific account
+        const accounts = await storage.getAccountsByService('elevenlabs');
+        const account = accounts.find((a: any) => a.isActive);
+        accountId = account?.id;
+        console.log(`Agent has no specific account, using first active account: ${accountId}`);
+      }
       
       // First check if audio is available
       const hasAudio = await elevenlabsService.hasConversationAudio(conversationId, accountId);
@@ -708,11 +724,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const conversationId = call.id.replace('EL-', '');
       
-      // Get the account ID for this agent
+      // Get the agent and its associated account ID
       const agent = await storage.getAgent(req.user!.id, call.agentId);
-      const accounts = await storage.getAccountsByService('elevenlabs');
-      const account = accounts.find((a: any) => a.isActive);
-      const accountId = account?.id;
+      let accountId: string | undefined;
+      
+      // Use the agent's specific account ID if available
+      if (agent?.accountId) {
+        accountId = agent.accountId;
+        console.log(`Availability check: Using agent's specific account ID: ${accountId} for agent: ${agent.name}`);
+      } else {
+        // Fallback to first active account if agent has no specific account
+        const accounts = await storage.getAccountsByService('elevenlabs');
+        const account = accounts.find((a: any) => a.isActive);
+        accountId = account?.id;
+        console.log(`Availability check: Agent has no specific account, using first active account: ${accountId}`);
+      }
       
       // Check if audio is available
       const hasAudio = await elevenlabsService.hasConversationAudio(conversationId, accountId);
