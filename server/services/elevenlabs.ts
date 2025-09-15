@@ -176,12 +176,12 @@ class ElevenLabsService {
   async getConversation(conversationId: string, accountId?: string): Promise<any> {
     const apiKey = await this.getApiKey(accountId);
     if (!apiKey) {
-      console.error('No API key available for getConversation');
+      console.error('[ElevenLabs] No API key available for getConversation');
       return null;
     }
 
     try {
-      console.log(`Fetching conversation ${conversationId} from ElevenLabs API`);
+      console.log(`[ElevenLabs] Fetching conversation ${conversationId} from API`);
       const response = await fetch(
         `https://api.elevenlabs.io/v1/convai/conversations/${conversationId}`,
         {
@@ -193,18 +193,18 @@ class ElevenLabsService {
       );
 
       if (!response.ok) {
-        console.error(`Failed to fetch conversation ${conversationId}: ${response.status} ${response.statusText}`);
+        console.error(`[ElevenLabs] Failed to fetch conversation ${conversationId}: ${response.status} ${response.statusText}`);
         if (response.status === 404) {
-          console.error(`Conversation ${conversationId} not found in ElevenLabs`);
+          console.error(`[ElevenLabs] Conversation ${conversationId} not found in API`);
         }
         return null;
       }
 
       const conversation = await response.json();
-      console.log(`Successfully fetched conversation ${conversationId}`);
+      console.log(`[ElevenLabs] Successfully fetched conversation ${conversationId}`);
       return conversation;
     } catch (error) {
-      console.error(`Error fetching conversation ${conversationId}:`, error);
+      console.error(`[ElevenLabs] Error fetching conversation ${conversationId}:`, error);
       return null;
     }
   }
@@ -313,6 +313,9 @@ class ElevenLabsService {
         console.log(`[ElevenLabs] Conversation ${conversationId} not found`);
         return false;
       }
+
+      // Log the entire conversation object to see what fields are actually available
+      console.log(`[ElevenLabs] Full conversation object for ${conversationId}:`, JSON.stringify(conversation, null, 2));
 
       // Debug logging for production - only check documented fields
       console.log(`[ElevenLabs] Conversation ${conversationId} audio check:`, {
