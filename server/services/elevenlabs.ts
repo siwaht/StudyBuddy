@@ -245,7 +245,7 @@ class ElevenLabsService {
   async getConversationAudio(conversationId: string, accountId?: string): Promise<Buffer | null> {
     const apiKey = await this.getApiKey(accountId);
     if (!apiKey) {
-      console.error('No API key available for ElevenLabs');
+      console.error('[ElevenLabs] No API key available for fetching audio');
       return null;
     }
 
@@ -253,13 +253,13 @@ class ElevenLabsService {
       // First, check if the conversation has audio available
       const conversation = await this.getConversation(conversationId, accountId);
       if (!conversation) {
-        console.error(`Conversation ${conversationId} not found`);
+        console.error(`[ElevenLabs] Conversation ${conversationId} not found`);
         return null;
       }
 
       // Check if conversation has a recording_url field (preferred method)
       if (conversation.recording_url) {
-        console.log(`Using recording_url from conversation: ${conversation.recording_url}`);
+        console.log(`[ElevenLabs] Using recording_url from conversation: ${conversation.recording_url}`);
         const response = await fetch(conversation.recording_url, {
           method: "GET",
           headers: {
@@ -269,14 +269,14 @@ class ElevenLabsService {
         
         if (response.ok) {
           const audioBuffer = await response.arrayBuffer();
-          console.log(`Successfully fetched audio from recording_url, size: ${audioBuffer.byteLength} bytes`);
+          console.log(`[ElevenLabs] Successfully fetched audio from recording_url, size: ${audioBuffer.byteLength} bytes`);
           return Buffer.from(audioBuffer);
         }
       }
 
       // Check if audio is available (this field may be present in the conversation response)
       if (conversation.has_audio === false && conversation.has_response_audio === false) {
-        console.log(`No audio available for conversation ${conversationId} - has_audio and has_response_audio are false`);
+        console.log(`[ElevenLabs] No audio available for conversation ${conversationId} - has_audio and has_response_audio are false`);
         return null;
       }
 
@@ -284,7 +284,7 @@ class ElevenLabsService {
       // Note: The /audio endpoint doesn't need format parameter for MP3
       const audioUrl = `https://api.elevenlabs.io/v1/convai/conversations/${conversationId}/audio`;
       
-      console.log(`Fetching audio from: ${audioUrl}`);
+      console.log(`[ElevenLabs] Fetching audio from: ${audioUrl}`);
       
       const response = await fetch(audioUrl, {
         method: "GET",
@@ -295,24 +295,24 @@ class ElevenLabsService {
       });
 
       if (!response.ok) {
-        console.error(`Failed to fetch audio for conversation ${conversationId}: ${response.status} ${response.statusText}`);
+        console.error(`[ElevenLabs] Failed to fetch audio for conversation ${conversationId}: ${response.status} ${response.statusText}`);
         
         // Log the response body for debugging
         try {
           const errorText = await response.text();
-          console.error(`Error response: ${errorText}`);
+          console.error(`[ElevenLabs] Error response: ${errorText}`);
         } catch (e) {
-          console.error('Could not read error response');
+          console.error('[ElevenLabs] Could not read error response');
         }
         
         return null;
       }
 
       const audioBuffer = await response.arrayBuffer();
-      console.log(`Successfully fetched audio for conversation ${conversationId}, size: ${audioBuffer.byteLength} bytes`);
+      console.log(`[ElevenLabs] Successfully fetched audio for conversation ${conversationId}, size: ${audioBuffer.byteLength} bytes`);
       return Buffer.from(audioBuffer);
     } catch (error) {
-      console.error(`Error fetching audio for conversation ${conversationId}:`, error);
+      console.error(`[ElevenLabs] Error fetching audio for conversation ${conversationId}:`, error);
       return null;
     }
   }
@@ -321,39 +321,43 @@ class ElevenLabsService {
   async hasConversationAudio(conversationId: string, accountId?: string): Promise<boolean> {
     const apiKey = await this.getApiKey(accountId);
     if (!apiKey) {
+      console.error('[ElevenLabs] No API key available for checking audio');
       return false;
     }
 
     try {
       const conversation = await this.getConversation(conversationId, accountId);
       if (!conversation) {
-        console.log(`Conversation ${conversationId} not found`);
+        console.log(`[ElevenLabs] Conversation ${conversationId} not found`);
         return false;
       }
 
-      // Debug log to see what fields are available
-      // Debug log to see what fields are available
-      console.log(`Conversation ${conversationId} audio fields:`, {
+      // Enhanced debug logging for production
+      console.log(`[ElevenLabs] Conversation ${conversationId} audio check:`, {
         has_recording_url: !!conversation.recording_url,
         has_audio: conversation.has_audio,
         has_user_audio: conversation.has_user_audio,
         has_response_audio: conversation.has_response_audio,
+        status: conversation.status,
+        phase: conversation.phase,
+        ended_at: conversation.ended_at,
         available_audio_fields: Object.keys(conversation).filter(k => k.toLowerCase().includes('audio') || k.toLowerCase().includes('recording') || k.toLowerCase().includes('media'))
       });
 
       // Check multiple fields for audio availability
-      // ElevenLabs returns has_audio field to indicate if audio is available
+      // ElevenLabs may have changed their API response structure
       const hasAudio = !!(conversation.recording_url || 
                          conversation.audio_url || 
                          conversation.audio_file || 
                          conversation.media?.audio || 
                          conversation.has_audio === true ||
-                         conversation.has_response_audio === true);
+                         conversation.has_response_audio === true ||
+                         conversation.has_user_audio === true);
       
-      console.log(`Conversation ${conversationId} hasAudio result: ${hasAudio}`);
+      console.log(`[ElevenLabs] Conversation ${conversationId} hasAudio result: ${hasAudio}`);
       return hasAudio;
     } catch (error) {
-      console.error(`Error checking audio availability for conversation ${conversationId}:`, error);
+      console.error(`[ElevenLabs] Error checking audio availability for conversation ${conversationId}:`, error);
       return false;
     }
   }

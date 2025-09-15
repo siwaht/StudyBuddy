@@ -54,6 +54,24 @@ export default function Calls() {
     limit: 20
   });
   const [isFilterOpen, setIsFilterOpen] = useState(false);
+  
+  // Force close filter when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (isFilterOpen && !target.closest('[data-sheet-content]') && !target.closest('[data-testid="filter-button"]')) {
+        setIsFilterOpen(false);
+      }
+    };
+    
+    if (isFilterOpen) {
+      document.addEventListener('click', handleClickOutside);
+    }
+    
+    return () => {
+      document.removeEventListener('click', handleClickOutside);
+    };
+  }, [isFilterOpen]);
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
 
@@ -267,7 +285,7 @@ export default function Calls() {
               )}
             </Button>
           </SheetTrigger>
-          <SheetContent>
+          <SheetContent data-sheet-content>
             <SheetHeader>
               <SheetTitle>Filter Calls</SheetTitle>
             </SheetHeader>
