@@ -59,13 +59,14 @@ class ElevenLabsService {
         apiKey = this.apiKey || null;
       }
 
-      // Clean the API key - remove whitespace
+      // Clean the API key - remove whitespace and basic validation
       if (apiKey) {
         apiKey = apiKey.trim();
-        // Validate the key format (should be alphanumeric with dashes/underscores)
-        if (!/^[a-zA-Z0-9-_]{20,}$/.test(apiKey)) {
-          console.error('Invalid API key format detected, falling back to environment variable');
+        if (apiKey.length < 10) {
+          console.error('[ElevenLabs] API key too short, falling back to environment variable');
           apiKey = process.env.ELEVENLABS_API_KEY || null;
+        } else {
+          console.log('[ElevenLabs] Using API key from storage');
         }
       }
 
@@ -183,7 +184,7 @@ class ElevenLabsService {
     try {
       console.log(`[ElevenLabs] Fetching conversation ${conversationId} from API`);
       const response = await fetch(
-        `https://api.elevenlabs.io/v1/conversational-ai/conversation/${conversationId}`,
+        `https://api.elevenlabs.io/v1/conversational-ai/conversations/${conversationId}`,
         {
           method: "GET",
           headers: {
@@ -250,16 +251,10 @@ class ElevenLabsService {
     }
 
     try {
-      // First, check if the conversation has audio available
-      const hasAudio = await this.hasConversationAudio(conversationId, accountId);
-      if (!hasAudio) {
-        console.log(`[ElevenLabs] No audio available for conversation ${conversationId} based on has_audio fields`);
-        return null;
-      }
-
+      // Try to fetch audio directly first - don't pre-check availability as it may be restrictive
       // Use the documented ElevenLabs endpoint for audio retrieval
-      // According to docs: GET /v1/conversational-ai/conversation/{conversation_id}/audio
-      const audioUrl = `https://api.elevenlabs.io/v1/conversational-ai/conversation/${conversationId}/audio`;
+      // According to docs: GET /v1/conversational-ai/conversations/{conversation_id}/audio
+      const audioUrl = `https://api.elevenlabs.io/v1/conversational-ai/conversations/${conversationId}/audio`;
       
       console.log(`[ElevenLabs] Fetching audio from: ${audioUrl}`);
       
@@ -279,9 +274,16 @@ class ElevenLabsService {
           const errorText = await response.text();
           console.error(`[ElevenLabs] Error response: ${errorText}`);
           
-          // If it's a 404, the audio might not be ready yet
+          // If it's a 404, the audio might not be ready yet - check availability as fallback
           if (response.status === 404) {
-            console.log(`[ElevenLabs] Audio not found for conversation ${conversationId} - it may not be ready yet or may have been deleted`);
+            console.log(`[ElevenLabs] Audio not found for conversation ${conversationId}, checking availability...`);
+            const hasAudio = await this.hasConversationAudio(conversationId, accountId);
+            if (!hasAudio) {
+              console.log(`[ElevenLabs] Availability check confirms no audio for conversation ${conversationId}`);
+              return null;
+            } else {
+              console.log(`[ElevenLabs] Availability check shows audio should exist for conversation ${conversationId} - may be processing`);
+            }
           }
         } catch (e) {
           console.error('[ElevenLabs] Could not read error response');
