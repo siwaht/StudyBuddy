@@ -57,11 +57,6 @@ export default function Analysis({ analysis }: AnalysisProps) {
       value: analysis.latencyWaterfall?.elevenLabsTTS || 0,
       color: "bg-purple-500"
     },
-    { 
-      name: "LiveKit Transport", 
-      value: analysis.latencyWaterfall?.liveKitTransport || 0,
-      color: "bg-blue-500"
-    },
   ];
 
   const maxLatency = Math.max(...latencySteps.map(step => step.value));

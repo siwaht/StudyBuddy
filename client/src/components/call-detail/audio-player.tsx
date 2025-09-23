@@ -97,7 +97,7 @@ export default function AudioPlayer({ recordingUrl, duration, metadata, call, on
 
   // Check recording availability and poll if processing
   useEffect(() => {
-    if (!call?.id || !call.id.startsWith('EL-')) {
+    if (!call?.id) {
       setRecordingStatus('unavailable');
       return;
     }
@@ -256,12 +256,8 @@ export default function AudioPlayer({ recordingUrl, duration, metadata, call, on
             <div className="flex justify-between">
               <span className="text-sm text-muted-foreground">Agent:</span>
               <span className="text-sm font-medium text-foreground">
-                {call?.agent?.name} ({call?.agent?.platform === "elevenlabs" ? "EL" : "LK"})
+                {call?.agent?.name} {call?.agent?.platform && "(ElevenLabs)"}
               </span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-sm text-muted-foreground">LiveKit Room:</span>
-              <span className="text-sm text-foreground">{metadata?.roomId || "N/A"}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-sm text-muted-foreground">Sentiment:</span>

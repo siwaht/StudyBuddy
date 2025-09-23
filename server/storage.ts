@@ -1,11 +1,10 @@
 import { 
-  users, agents, calls, performanceMetrics, liveKitRooms, userAgents, accounts,
+  users, agents, calls, performanceMetrics, userAgents, accounts,
   phoneNumbers, syncHistory, playgroundSessions,
   type User, type InsertUser,
   type Agent, type InsertAgent,
   type Call, type InsertCall,
   type PerformanceMetric, type InsertPerformanceMetric,
-  type LiveKitRoom, type InsertLiveKitRoom,
   type UserAgent, type InsertUserAgent,
   type Account, type InsertAccount,
   type PhoneNumber, type InsertPhoneNumber,
@@ -59,19 +58,13 @@ export interface IStorage {
   getPerformanceMetrics(userId: string): Promise<PerformanceMetric[]>;
   createPerformanceMetric(metric: InsertPerformanceMetric): Promise<PerformanceMetric>;
 
-  // LiveKit Rooms - REQUIRES USER ID FOR DATA ISOLATION
-  getLiveKitRoom(userId: string, roomId: string): Promise<LiveKitRoom | undefined>;
-  getAllLiveKitRooms(userId: string): Promise<LiveKitRoom[]>;
-  createLiveKitRoom(room: InsertLiveKitRoom): Promise<LiveKitRoom>;
-  updateLiveKitRoom(id: string, updates: Partial<LiveKitRoom>): Promise<LiveKitRoom | undefined>;
-
   // Dashboard data - REQUIRES USER ID FOR DATA ISOLATION
   getDashboardStats(userId: string): Promise<{
     totalCalls: number;
     avgHandleTime: string;
     elevenLabsLatencyP95: number;
     activeRooms: number;
-    callVolumeData: Array<{ time: string; elevenlabs: number; livekit: number }>;
+    callVolumeData: Array<{ time: string; elevenlabs: number; }>;
     recentCalls: Call[];
   }>;
 
@@ -144,7 +137,7 @@ export interface IStorage {
   // Accounts Management
   getAccount(accountId: string): Promise<Account | undefined>;
   getAllAccounts(): Promise<Account[]>;
-  getAccountsByService(service: 'elevenlabs' | 'livekit'): Promise<Account[]>;
+  getAccountsByService(service: 'elevenlabs'): Promise<Account[]>;
   createAccount(account: InsertAccount): Promise<Account>;
   updateAccount(accountId: string, updates: Partial<Account>): Promise<Account | undefined>;
   deleteAccount(accountId: string): Promise<boolean>;
@@ -290,28 +283,11 @@ export class DatabaseStorage implements IStorage {
         lastSynced: new Date(Date.now() - 24 * 60 * 60 * 1000), // 1 day ago
         metadata: { workspace: "Dev Workspace" },
       },
-      {
-        name: "Main LiveKit Account",
-        service: "livekit",
-        encryptedApiKey: "encrypted_livekit_key_main",
-        isActive: true,
-        lastSynced: new Date(Date.now() - 1 * 60 * 60 * 1000), // 1 hour ago
-        metadata: { region: "us-east-1" },
-      },
-      {
-        name: "Backup LiveKit Account",
-        service: "livekit",
-        encryptedApiKey: "encrypted_livekit_key_backup",
-        isActive: false,
-        lastSynced: null,
-        metadata: { region: "eu-west-1" },
-      },
     ]).returning();
 
     // Get account IDs for linking agents
     const prodElevenLabsId = seedAccounts.find(a => a.name === "Production ElevenLabs")?.id;
     const devElevenLabsId = seedAccounts.find(a => a.name === "Development ElevenLabs")?.id;
-    const mainLiveKitId = seedAccounts.find(a => a.name === "Main LiveKit Account")?.id;
 
     // Seed agents linked to accounts
     const seedAgents = await db.insert(agents).values([
@@ -325,15 +301,6 @@ export class DatabaseStorage implements IStorage {
         isActive: true,
       },
       {
-        name: "SupportRouter",
-        platform: "livekit",
-        accountId: mainLiveKitId || null,
-        description: "Advanced technical support worker with GPT-4o integration",
-        externalId: null,
-        metadata: null,
-        isActive: true,
-      },
-      {
         name: "IVR Assistant",
         platform: "elevenlabs",
         accountId: devElevenLabsId || null,
@@ -341,15 +308,6 @@ export class DatabaseStorage implements IStorage {
         externalId: null,
         metadata: null,
         isActive: false,
-      },
-      {
-        name: "Customer Service Bot",
-        platform: "livekit",
-        accountId: mainLiveKitId || null,
-        description: "General customer service inquiries",
-        externalId: null,
-        metadata: null,
-        isActive: true,
       },
     ]).returning();
 
@@ -359,9 +317,7 @@ export class DatabaseStorage implements IStorage {
     const johnId = seedUsers.find(u => u.username === "john.doe")?.id!;
     
     const salesBotId = seedAgents.find(a => a.name === "SalesBot")?.id!;
-    const supportRouterId = seedAgents.find(a => a.name === "SupportRouter")?.id!;
     const ivrAssistantId = seedAgents.find(a => a.name === "IVR Assistant")?.id!;
-    const customerServiceId = seedAgents.find(a => a.name === "Customer Service Bot")?.id!;
 
     // Bob gets SalesBot and IVR Assistant
     await db.insert(userAgents).values([
@@ -369,32 +325,16 @@ export class DatabaseStorage implements IStorage {
       { userId: bobId, agentId: ivrAssistantId },
     ]);
 
-    // Sarah gets SupportRouter and Customer Service Bot
+    // Sarah gets IVR Assistant
     await db.insert(userAgents).values([
-      { userId: sarahId, agentId: supportRouterId },
-      { userId: sarahId, agentId: customerServiceId },
+      { userId: sarahId, agentId: ivrAssistantId },
     ]);
 
-    // John gets only Customer Service Bot
+    // John gets Sales Bot
     await db.insert(userAgents).values([
-      { userId: johnId, agentId: customerServiceId },
+      { userId: johnId, agentId: salesBotId },
     ]);
 
-    // Seed LiveKit rooms
-    await db.insert(liveKitRooms).values([
-      {
-        roomId: "RM_A9B8C7",
-        name: "Sales Conference",
-        isActive: true,
-        participantCount: 3,
-      },
-      {
-        roomId: "RM_D4E5F6",
-        name: "Support Room",
-        isActive: true,
-        participantCount: 2,
-      },
-    ]);
 
     // Seed calls
     const seedCalls = await db.insert(calls).values([
@@ -419,7 +359,6 @@ export class DatabaseStorage implements IStorage {
             speechToText: 80,
             agentLogic: 60,
             elevenLabsTTS: 120,
-            liveKitTransport: 50,
           }
         },
         metadata: { roomId: "RM_A9B8C7" },
@@ -445,7 +384,6 @@ export class DatabaseStorage implements IStorage {
             speechToText: 95,
             agentLogic: 45,
             elevenLabsTTS: 0,
-            liveKitTransport: 30,
           }
         },
         metadata: { roomId: "RM_D4E5F6" },
@@ -471,7 +409,6 @@ export class DatabaseStorage implements IStorage {
             speechToText: 70,
             agentLogic: 50,
             elevenLabsTTS: 0,
-            liveKitTransport: 40,
           }
         },
         metadata: { roomId: "RM_D4E5F6" },
@@ -485,7 +422,6 @@ export class DatabaseStorage implements IStorage {
         callId: call.id,
         speechToTextLatency: (call.analysis as any)?.latencyWaterfall?.speechToText || 0,
         elevenLabsLatency: (call.analysis as any)?.latencyWaterfall?.elevenLabsTTS || 0,
-        liveKitLatency: (call.analysis as any)?.latencyWaterfall?.liveKitTransport || 0,
         totalLatency: Object.values((call.analysis as any)?.latencyWaterfall || {}).reduce((a: number, b: any) => a + b, 0),
         responseTime: 95,
         audioQuality: "4.6",
@@ -781,30 +717,6 @@ export class DatabaseStorage implements IStorage {
     return created;
   }
 
-  // LiveKit Rooms methods
-  async getLiveKitRoom(userId: string, roomId: string): Promise<LiveKitRoom | undefined> {
-    const [room] = await db.select().from(liveKitRooms)
-      .where(eq(liveKitRooms.id, roomId));
-    return room || undefined;
-  }
-
-  async getAllLiveKitRooms(userId: string): Promise<LiveKitRoom[]> {
-    return await db.select().from(liveKitRooms)
-      .where(eq(liveKitRooms.isActive, true));
-  }
-
-  async createLiveKitRoom(room: InsertLiveKitRoom): Promise<LiveKitRoom> {
-    const [created] = await db.insert(liveKitRooms).values(room).returning();
-    return created;
-  }
-
-  async updateLiveKitRoom(id: string, updates: Partial<LiveKitRoom>): Promise<LiveKitRoom | undefined> {
-    const [updated] = await db.update(liveKitRooms)
-      .set(updates)
-      .where(eq(liveKitRooms.id, id))
-      .returning();
-    return updated || undefined;
-  }
 
   // Dashboard stats
   async getDashboardStats(userId: string): Promise<{
@@ -812,7 +724,7 @@ export class DatabaseStorage implements IStorage {
     avgHandleTime: string;
     elevenLabsLatencyP95: number;
     activeRooms: number;
-    callVolumeData: Array<{ time: string; elevenlabs: number; livekit: number }>;
+    callVolumeData: Array<{ time: string; elevenlabs: number; }>;
     recentCalls: Call[];
     platforms: string[];
   }> {
@@ -857,17 +769,8 @@ export class DatabaseStorage implements IStorage {
     const allAgents = await db.select().from(agents)
       .where(inArray(agents.id, assignedAgentIds));
     
-    // Get active rooms only for user's LiveKit agents
-    const userLiveKitAgents = allAgents.filter(a => a.platform === 'livekit');
-    const userLiveKitAgentIds = userLiveKitAgents.map(a => a.id);
-    
+    // No LiveKit rooms in the system
     let activeRooms = [];
-    if (userLiveKitAgentIds.length > 0) {
-      // Only query rooms if user has LiveKit agents
-      // Note: liveKitRooms doesn't have agentId field, so we just get active rooms
-      activeRooms = await db.select().from(liveKitRooms)
-        .where(eq(liveKitRooms.isActive, true));
-    }
     
     // Get unique platforms for assigned agents
     const platforms = Array.from(new Set(allAgents.map(a => a.platform)));
@@ -892,15 +795,11 @@ export class DatabaseStorage implements IStorage {
         return agent?.platform === 'elevenlabs';
       }).length;
       
-      const livekitCalls = daysCalls.filter(call => {
-        const agent = allAgents.find(a => a.id === call.agentId);
-        return agent?.platform === 'livekit';
-      }).length;
+      const livekitCalls = 0; // No LiveKit calls
       
       callVolumeData.push({
         time: date.toLocaleDateString('en-US', { weekday: 'short' }),
         elevenlabs: elevenLabsCalls,
-        livekit: livekitCalls
       });
     }
 
@@ -1412,7 +1311,7 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(accounts);
   }
 
-  async getAccountsByService(service: 'elevenlabs' | 'livekit'): Promise<Account[]> {
+  async getAccountsByService(service: 'elevenlabs'): Promise<Account[]> {
     return await db.select().from(accounts)
       .where(eq(accounts.service, service));
   }
