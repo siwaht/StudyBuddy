@@ -3,7 +3,7 @@ export interface DashboardStats {
   avgHandleTime: string;
   elevenLabsLatencyP95: number;
   activeRooms: number;
-  callVolumeData: Array<{ time: string; elevenlabs: number; livekit: number }>;
+  callVolumeData: Array<{ time: string; elevenlabs: number }>;
   recentCalls: any[];
   platforms: string[];
 }
@@ -25,14 +25,13 @@ export interface CallWithAgent {
       speechToText?: number;
       agentLogic?: number;
       elevenLabsTTS?: number;
-      liveKitTransport?: number;
     };
   };
   metadata?: any;
   agent?: {
     id: string;
     name: string;
-    platform: "elevenlabs" | "livekit";
+    platform: "elevenlabs";
     description?: string;
   };
 }

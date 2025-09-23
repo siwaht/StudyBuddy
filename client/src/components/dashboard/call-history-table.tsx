@@ -26,8 +26,6 @@ const getPlatformColor = (platform?: string) => {
   switch (platform) {
     case "elevenlabs":
       return "bg-blue-50 text-blue-700 border-blue-200";
-    case "livekit":
-      return "bg-sky-50 text-sky-700 border-sky-200";
     default:
       return "bg-gray-50 text-gray-700 border-gray-200";
   }
@@ -92,7 +90,7 @@ export default function CallHistoryTable({ calls }: CallHistoryTableProps) {
                         variant="outline" 
                         className={`text-xs w-fit mt-1 ${getPlatformColor(call.agent?.platform)}`}
                       >
-                        {call.agent?.platform === "elevenlabs" ? "ElevenLabs" : "LiveKit"}
+                        {call.agent?.platform === "elevenlabs" ? "ElevenLabs" : "Unknown"}
                       </Badge>
                     </div>
                   </td>

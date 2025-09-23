@@ -10,7 +10,6 @@ interface AnalysisProps {
       speechToText?: number;
       agentLogic?: number;
       elevenLabsTTS?: number;
-      liveKitTransport?: number;
     };
   };
 }

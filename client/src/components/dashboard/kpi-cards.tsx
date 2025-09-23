@@ -42,17 +42,6 @@ export default function KpiCards({ stats }: KpiCardsProps) {
     });
   }
 
-  if (stats.platforms?.includes('livekit')) {
-    platformKpis.push({
-      title: "LiveKit Active Rooms",
-      value: stats.activeRooms,
-      icon: Circle,
-      trend: "online",
-      trendColor: "text-emerald-500",
-      trendUp: undefined,
-      valueColor: "text-primary",
-    });
-  }
 
   const kpis = [...baseKpis, ...platformKpis];
 
