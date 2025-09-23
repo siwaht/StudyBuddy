@@ -372,6 +372,96 @@ export class ElevenLabsIntegration {
     }
   }
 
+  // Check if conversation has audio available
+  async hasConversationAudio(conversationId: string, accountId?: string): Promise<boolean> {
+    try {
+      const apiKey = await this.getApiKey(accountId);
+      if (!apiKey) {
+        console.log('[ElevenLabs] No API key available for audio check');
+        return false;
+      }
+      
+      console.log('[ElevenLabs] Using API key from', accountId ? 'storage' : 'environment');
+      console.log(`[ElevenLabs] Checking audio availability for conversation ${conversationId}`);
+      
+      // Check if the conversation exists and has audio by trying to fetch the conversation details
+      const response = await fetch(
+        `https://api.elevenlabs.io/v1/convai/conversations/${conversationId}`,
+        {
+          method: 'GET',
+          headers: {
+            'xi-api-key': apiKey,
+          },
+        }
+      );
+      
+      if (!response.ok) {
+        console.log(`[ElevenLabs] Failed to check conversation ${conversationId}: ${response.status} ${response.statusText}`);
+        
+        if (response.status === 404) {
+          console.log(`[ElevenLabs] Conversation ${conversationId} not found in API`);
+          return false;
+        }
+        
+        return false;
+      }
+      
+      const data = await response.json();
+      console.log(`[ElevenLabs] Conversation ${conversationId} found with audio`);
+      
+      // Return true if conversation exists (audio is stored automatically for conversations)
+      return true;
+    } catch (error: any) {
+      console.error('[ElevenLabs] Error checking audio availability:', error.message);
+      return false;
+    }
+  }
+  
+  // Fetch conversation audio from ElevenLabs API
+  async getConversationAudio(conversationId: string, accountId?: string): Promise<Buffer | null> {
+    try {
+      const apiKey = await this.getApiKey(accountId);
+      if (!apiKey) {
+        console.error('[ElevenLabs] No API key available for fetching audio');
+        return null;
+      }
+      
+      console.log('[ElevenLabs] Using API key from', accountId ? 'storage' : 'environment');
+      console.log(`[ElevenLabs] Fetching conversation ${conversationId} from API`);
+      
+      // Fetch audio from ElevenLabs API
+      const response = await fetch(
+        `https://api.elevenlabs.io/v1/convai/conversations/${conversationId}/audio`,
+        {
+          method: 'GET',
+          headers: {
+            'xi-api-key': apiKey,
+          },
+        }
+      );
+      
+      if (!response.ok) {
+        console.log(`[ElevenLabs] Failed to fetch conversation ${conversationId}: ${response.status} ${response.statusText}`);
+        
+        if (response.status === 404) {
+          console.log(`[ElevenLabs] Conversation ${conversationId} not found in API`);
+        }
+        
+        console.log(`[ElevenLabs] Conversation ${conversationId} not found`);
+        return null;
+      }
+      
+      // Get the audio buffer
+      const audioBuffer = await response.arrayBuffer();
+      console.log(`[ElevenLabs] Successfully fetched audio for conversation ${conversationId} (${audioBuffer.byteLength} bytes)`);
+      
+      return Buffer.from(audioBuffer);
+    } catch (error: any) {
+      console.error('[ElevenLabs] Error fetching conversation audio:', error.message);
+      return null;
+    }
+  }
+
   // New method to handle webhook data for recordings
   async processWebhookData(webhookData: {
     conversation_id: string;

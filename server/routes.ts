@@ -2197,6 +2197,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Recording not found or access denied" });
       }
       
+      // If we have a conversationId, fetch the audio from ElevenLabs API
+      if (call.conversationId) {
+        try {
+          // Get API key from environment or configured account
+          const apiKey = process.env.ELEVENLABS_API_KEY;
+          if (!apiKey) {
+            console.error('No ElevenLabs API key configured');
+            return res.status(404).json({ message: "No recording available - API key not configured" });
+          }
+          
+          // Fetch audio from ElevenLabs API
+          const elevenLabsResponse = await fetch(
+            `https://api.elevenlabs.io/v1/convai/conversations/${call.conversationId}/audio`,
+            {
+              headers: {
+                'xi-api-key': apiKey
+              }
+            }
+          );
+          
+          if (!elevenLabsResponse.ok) {
+            console.error(`ElevenLabs API error: ${elevenLabsResponse.status}`);
+            return res.status(404).json({ message: "Recording not available from ElevenLabs" });
+          }
+          
+          // Get the audio data
+          const audioBuffer = await elevenLabsResponse.arrayBuffer();
+          
+          // Set appropriate headers
+          res.setHeader('Content-Type', 'audio/mpeg');
+          res.setHeader('Content-Disposition', `attachment; filename="call_${callId}.mp3"`);
+          res.send(Buffer.from(audioBuffer));
+          return;
+        } catch (error) {
+          console.error('Error fetching recording from ElevenLabs:', error);
+          // Fall through to check local storage
+        }
+      }
+      
+      // Fallback: Check if we have a local recording (from webhooks)
       if (!call.recordingUrl) {
         return res.status(404).json({ message: "No recording available for this call" });
       }
