@@ -106,6 +106,8 @@ export class ElevenLabsIntegration {
         throw new Error('API key not available');
       }
       
+      console.log(`Fetching agent ${cleanAgentId} from ElevenLabs...`);
+      
       const response = await fetch(
         `https://api.elevenlabs.io/v1/convai/agents/${cleanAgentId}`,
         {
@@ -117,15 +119,16 @@ export class ElevenLabsIntegration {
       );
 
       if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`ElevenLabs API error: ${response.status} - ${errorText}`);
+        
         if (response.status === 404) {
           return null;
         }
         if (response.status === 401) {
-
           throw new Error('Invalid ElevenLabs API key. Please check your API key in Integrations.');
         }
-        const errorText = await response.text();
-
+        
         throw new Error(`Failed to fetch agent: ${response.status} ${response.statusText}`);
       }
 

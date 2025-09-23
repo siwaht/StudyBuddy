@@ -420,6 +420,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Test ElevenLabs API Key
+  app.get("/api/test-elevenlabs", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const apiKey = await elevenLabsIntegration.getApiKey();
+      
+      if (!apiKey) {
+        return res.status(400).json({ message: "No ElevenLabs API key configured" });
+      }
+      
+      // Test the API key by fetching the user info
+      const response = await fetch(
+        'https://api.elevenlabs.io/v1/user',
+        {
+          method: 'GET',
+          headers: {
+            'xi-api-key': apiKey,
+          },
+        }
+      );
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`ElevenLabs API test failed: ${response.status} - ${errorText}`);
+        return res.status(response.status).json({ 
+          message: "ElevenLabs API key test failed", 
+          status: response.status,
+          error: errorText 
+        });
+      }
+      
+      const userData = await response.json();
+      res.json({ 
+        message: "ElevenLabs API key is valid", 
+        subscription: userData.subscription,
+        character_count: userData.character_count,
+        character_limit: userData.character_limit
+      });
+      
+    } catch (error: any) {
+      console.error('Error testing ElevenLabs API:', error);
+      res.status(500).json({ message: error.message || "Failed to test API key" });
+    }
+  });
+
   // Agent routes - Protected with data isolation
   app.get("/api/agents", requireAuth, async (req: Request, res: Response) => {
     try {
