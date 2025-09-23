@@ -29,7 +29,7 @@ import { Switch } from "@/components/ui/switch";
 interface Account {
   id: string;
   name: string;
-  service: 'elevenlabs' | 'livekit';
+  service: 'elevenlabs';
   isActive: boolean;
   lastSynced: string | null;
   metadata: any;
@@ -43,7 +43,7 @@ export default function Integrations() {
   const [isUpdateDialogOpen, setIsUpdateDialogOpen] = useState(false);
   const [selectedAccount, setSelectedAccount] = useState<Account | null>(null);
   const [accountName, setAccountName] = useState("");
-  const [selectedService, setSelectedService] = useState<'elevenlabs' | 'livekit' | ''>("");
+  const [selectedService, setSelectedService] = useState<'elevenlabs' | ''>("");
   const [apiKey, setApiKey] = useState("");
   const [isActive, setIsActive] = useState(true);
   const { toast } = useToast();
@@ -179,10 +179,6 @@ export default function Integrations() {
         name: "ElevenLabs",
         description: "High-quality AI voice synthesis and conversational AI agents",
       },
-      livekit: {
-        name: "LiveKit",
-        description: "Real-time audio and video streaming infrastructure",
-      },
     };
     return info[service] || { name: service, description: "" };
   };
@@ -216,7 +212,6 @@ export default function Integrations() {
   }
 
   const elevenLabsAccounts = accounts?.filter(a => a.service === 'elevenlabs') || [];
-  const liveKitAccounts = accounts?.filter(a => a.service === 'livekit') || [];
 
   return (
     <div className="space-y-6 p-6" data-testid="integrations-page">
@@ -241,10 +236,10 @@ export default function Integrations() {
       </Alert>
 
       {/* Service Overview */}
-      <div className="grid gap-4 md:grid-cols-2">
-        {(['elevenlabs', 'livekit'] as const).map((service) => {
+      <div className="grid gap-4">
+        {(['elevenlabs'] as const).map((service) => {
           const info = getServiceInfo(service);
-          const serviceAccounts = service === 'elevenlabs' ? elevenLabsAccounts : liveKitAccounts;
+          const serviceAccounts = elevenLabsAccounts;
           const activeCount = serviceAccounts.filter(a => a.isActive).length;
           
           return (
@@ -378,7 +373,6 @@ export default function Integrations() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="elevenlabs">ElevenLabs</SelectItem>
-                  <SelectItem value="livekit">LiveKit</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -387,7 +381,7 @@ export default function Integrations() {
               <Input
                 id="api-key"
                 type="password"
-                placeholder={selectedService === 'livekit' ? "Format: apiKey:apiSecret" : "sk_xxx... or xi-xxx... (NOT agent_xxx)"}
+                placeholder="sk_xxx... or xi-xxx... (NOT agent_xxx)"
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
                 data-testid="input-api-key"
@@ -413,14 +407,6 @@ export default function Integrations() {
                       </a>
                     </p>
                   </div>
-                </AlertDescription>
-              </Alert>
-            )}
-            {selectedService === 'livekit' && (
-              <Alert>
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>
-                  Enter your LiveKit credentials in the format: "apiKey:apiSecret"
                 </AlertDescription>
               </Alert>
             )}
@@ -470,7 +456,7 @@ export default function Integrations() {
               <Input
                 id="update-api-key"
                 type="password"
-                placeholder={selectedAccount?.service === 'livekit' ? "Format: apiKey:apiSecret" : "Enter new API key..."}
+                placeholder="Enter new API key..."
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
                 data-testid="input-update-api-key"

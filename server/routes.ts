@@ -4,7 +4,6 @@ import { storage } from "./storage";
 import { insertUserSchema, insertAgentSchema, insertCallSchema, type Account } from "@shared/schema";
 import { hashPassword, validatePassword, requireAuth, requireAdmin } from "./auth";
 import { z } from "zod";
-import * as livekit from "./livekit";
 import { elevenLabsIntegration } from "./integrations/elevenlabs";
 import { elevenlabsService } from "./services/elevenlabs";
 import { encrypt, decrypt } from "./utils/crypto";
@@ -824,131 +823,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // LiveKit room routes - Protected with data isolation
-  app.get("/api/livekit/rooms", requireAuth, async (req: Request, res: Response) => {
-    try {
-      if (!livekit.isLiveKitConfigured()) {
-        return res.status(503).json({ 
-          message: "LiveKit is not configured",
-          status: livekit.getLiveKitStatus()
-        });
-      }
-      
-      const rooms = await livekit.getActiveRooms();
-      res.json(rooms);
-    } catch (error) {
-      console.error('Error fetching LiveKit rooms:', error);
-      res.status(500).json({ message: "Failed to fetch LiveKit rooms" });
-    }
-  });
-  
-  // LiveKit metrics route
-  app.get("/api/livekit/metrics", requireAuth, async (req: Request, res: Response) => {
-    try {
-      if (!livekit.isLiveKitConfigured()) {
-        return res.status(503).json({ 
-          message: "LiveKit is not configured",
-          status: livekit.getLiveKitStatus()
-        });
-      }
-      
-      const metrics = await livekit.getLiveKitMetrics();
-      res.json(metrics);
-    } catch (error) {
-      console.error('Error fetching LiveKit metrics:', error);
-      res.status(500).json({ message: "Failed to fetch LiveKit metrics" });
-    }
-  });
-  
-  // Get participants in a specific room
-  app.get("/api/livekit/rooms/:roomName/participants", requireAuth, async (req: Request, res: Response) => {
-    try {
-      if (!livekit.isLiveKitConfigured()) {
-        return res.status(503).json({ 
-          message: "LiveKit is not configured",
-          status: livekit.getLiveKitStatus()
-        });
-      }
-      
-      const participants = await livekit.getRoomParticipants(req.params.roomName);
-      res.json(participants);
-    } catch (error) {
-      console.error('Error fetching room participants:', error);
-      res.status(500).json({ message: "Failed to fetch room participants" });
-    }
-  });
-  
-  // Create access token for a participant
-  app.post("/api/livekit/token", requireAuth, async (req: Request, res: Response) => {
-    try {
-      if (!livekit.isLiveKitConfigured()) {
-        return res.status(503).json({ 
-          message: "LiveKit is not configured",
-          status: livekit.getLiveKitStatus()
-        });
-      }
-      
-      const { roomName, participantIdentity, participantName } = req.body;
-      
-      if (!roomName || !participantIdentity) {
-        return res.status(400).json({ message: "roomName and participantIdentity are required" });
-      }
-      
-      const token = await livekit.createAccessToken(roomName, participantIdentity, participantName);
-      res.json({ token, url: process.env.LIVEKIT_URL });
-    } catch (error) {
-      console.error('Error creating LiveKit token:', error);
-      res.status(500).json({ message: "Failed to create LiveKit token" });
-    }
-  });
-  
-  // Create a new room (Admin only)
-  app.post("/api/livekit/rooms", requireAuth, requireAdmin, async (req: Request, res: Response) => {
-    try {
-      if (!livekit.isLiveKitConfigured()) {
-        return res.status(503).json({ 
-          message: "LiveKit is not configured",
-          status: livekit.getLiveKitStatus()
-        });
-      }
-      
-      const { roomName, emptyTimeout, maxParticipants, metadata } = req.body;
-      
-      if (!roomName) {
-        return res.status(400).json({ message: "roomName is required" });
-      }
-      
-      const room = await livekit.createRoom(roomName, emptyTimeout, maxParticipants, metadata);
-      res.status(201).json(room);
-    } catch (error) {
-      console.error('Error creating LiveKit room:', error);
-      res.status(500).json({ message: "Failed to create LiveKit room" });
-    }
-  });
-  
-  // Delete a room (Admin only)
-  app.delete("/api/livekit/rooms/:roomName", requireAuth, requireAdmin, async (req: Request, res: Response) => {
-    try {
-      if (!livekit.isLiveKitConfigured()) {
-        return res.status(503).json({ 
-          message: "LiveKit is not configured",
-          status: livekit.getLiveKitStatus()
-        });
-      }
-      
-      await livekit.deleteRoom(req.params.roomName);
-      res.status(204).send();
-    } catch (error) {
-      console.error('Error deleting LiveKit room:', error);
-      res.status(500).json({ message: "Failed to delete LiveKit room" });
-    }
-  });
-  
-  // LiveKit configuration status
-  app.get("/api/livekit/status", requireAuth, async (req: Request, res: Response) => {
-    const status = livekit.getLiveKitStatus();
-    res.json(status);
-  });
 
   // Performance metrics routes - Protected with data isolation
   app.get("/api/metrics/agent/:agentId", requireAuth, async (req: Request, res: Response) => {
@@ -994,7 +868,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Validate service name
-      const validServices = ['elevenlabs', 'livekit'];
+      const validServices = ['elevenlabs'];
       if (!validServices.includes(service)) {
         return res.status(400).json({ message: "Invalid service" });
       }
@@ -1024,7 +898,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Create the account
       const account = await storage.createAccount({
         name,
-        service: service as 'elevenlabs' | 'livekit',
+        service: service as 'elevenlabs',
         encryptedApiKey: encryptedKey,
         isActive: true,
         metadata: null,
@@ -1044,15 +918,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
         }
         console.log('ElevenLabs connection test passed for account:', account.id);
-      } else if (service === 'livekit') {
-        // For LiveKit, validate that the key contains both API key and secret
-        if (!apiKey.includes(':')) {
-          await storage.deleteAccount(account.id);
-          return res.status(400).json({ 
-            message: "Invalid LiveKit credentials format. Please enter in format: API_KEY:API_SECRET",
-            hint: "Combine your API key and secret with a colon between them" 
-          });
-        }
       }
       
       res.status(201).json({ 
@@ -1129,11 +994,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { service } = req.params;
       
-      if (service !== 'elevenlabs' && service !== 'livekit') {
+      if (service !== 'elevenlabs') {
         return res.status(400).json({ message: "Invalid service" });
       }
       
-      const accounts = await storage.getAccountsByService(service as 'elevenlabs' | 'livekit');
+      const accounts = await storage.getAccountsByService(service as 'elevenlabs');
       
       const accountsData = accounts.map(account => ({
         id: account.id,

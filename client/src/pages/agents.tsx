@@ -51,7 +51,7 @@ interface Agent {
 interface Account {
   id: string;
   name: string;
-  service: 'elevenlabs' | 'livekit';
+  service: 'elevenlabs';
   isActive: boolean;
   lastSynced: string | null;
   metadata: any;
@@ -66,9 +66,9 @@ export default function Agents() {
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
   const [importForm, setImportForm] = useState({
-    platform: "elevenlabs" as 'elevenlabs' | 'livekit',
+    platform: "elevenlabs" as 'elevenlabs',
     agentId: "",
-    accountId: "",
+    accountId: "env",
   });
   const [searchedAgent, setSearchedAgent] = useState<any>(null);
   const { toast } = useToast();
@@ -114,7 +114,7 @@ export default function Agents() {
         description: "Agent imported successfully",
       });
       setIsImportAgentOpen(false);
-      setImportForm({ platform: "elevenlabs", agentId: "", accountId: "" });
+      setImportForm({ platform: "elevenlabs", agentId: "", accountId: "env" });
       setSearchedAgent(null);
       queryClient.invalidateQueries({ queryKey: ["/api/agents"] });
     },
@@ -138,7 +138,7 @@ export default function Agents() {
         description: `${data.imported} agents imported successfully${data.failed > 0 ? `, ${data.failed} failed` : ''}`,
       });
       setIsImportAgentOpen(false);
-      setImportForm({ platform: "elevenlabs", agentId: "", accountId: "" });
+      setImportForm({ platform: "elevenlabs", agentId: "", accountId: "env" });
       setSearchedAgent(null);
       queryClient.invalidateQueries({ queryKey: ["/api/agents"] });
     },
@@ -235,14 +235,6 @@ export default function Agents() {
       });
       return;
     }
-    if (!importForm.accountId) {
-      toast({
-        title: "Error",
-        description: "Please select an account",
-        variant: "destructive",
-      });
-      return;
-    }
     
     // Validate that the user isn't entering an API key instead of an agent ID
     if (importForm.agentId.startsWith('sk_') || importForm.agentId.startsWith('xi-')) {
@@ -262,17 +254,9 @@ export default function Agents() {
   };
 
   const handleImportAllAgents = () => {
-    if (!importForm.accountId) {
-      toast({
-        title: "Error",
-        description: "Please select an account",
-        variant: "destructive",
-      });
-      return;
-    }
     importAllAgentsMutation.mutate({ 
       platform: importForm.platform,
-      accountId: importForm.accountId 
+      accountId: importForm.accountId || 'env'
     });
   };
 
@@ -300,8 +284,6 @@ export default function Agents() {
     switch (platform) {
       case 'elevenlabs':
         return 'ElevenLabs';
-      case 'livekit':
-        return 'LiveKit';
       default:
         return platform;
     }
@@ -333,7 +315,7 @@ export default function Agents() {
             <Bot className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
             <p className="text-muted-foreground mb-4">No agents imported yet</p>
             <p className="text-sm text-muted-foreground mb-4">
-              Import your first agent from ElevenLabs or LiveKit to get started
+              Import your first agent from ElevenLabs to get started
             </p>
             <Button onClick={() => setIsImportAgentOpen(true)}>
               <Download className="h-4 w-4 mr-2" />
@@ -414,14 +396,14 @@ export default function Agents() {
         setIsImportAgentOpen(open);
         if (!open) {
           setSearchedAgent(null);
-          setImportForm({ platform: "elevenlabs", agentId: "", accountId: "" });
+          setImportForm({ platform: "elevenlabs", agentId: "", accountId: "env" });
         }
       }}>
         <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>Import Agent</DialogTitle>
             <DialogDescription>
-              Import an existing AI voice agent from ElevenLabs or LiveKit.
+              Import an existing AI voice agent from ElevenLabs.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4 overflow-y-auto flex-1">
@@ -429,21 +411,9 @@ export default function Agents() {
               <Label htmlFor="platform" className="text-right">
                 Platform
               </Label>
-              <Select
-                value={importForm.platform}
-                onValueChange={(value: 'elevenlabs' | 'livekit') => {
-                  setImportForm({ ...importForm, platform: value, accountId: "" });
-                  setSearchedAgent(null);
-                }}
-              >
-                <SelectTrigger className="col-span-3" data-testid="select-platform">
-                  <SelectValue placeholder="Select platform" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="elevenlabs">ElevenLabs</SelectItem>
-                  <SelectItem value="livekit" disabled>LiveKit (Coming Soon)</SelectItem>
-                </SelectContent>
-              </Select>
+              <div className="col-span-3">
+                <Input value="ElevenLabs" disabled />
+              </div>
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="account" className="text-right">
@@ -460,18 +430,14 @@ export default function Agents() {
                   <SelectValue placeholder="Select account" />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="env">Use Environment Variable (Default)</SelectItem>
                   {accounts
-                    .filter(a => a.service === importForm.platform && a.isActive)
+                    .filter(a => a.service === 'elevenlabs' && a.isActive)
                     .map(account => (
                       <SelectItem key={account.id} value={account.id}>
                         {account.name}
                       </SelectItem>
                     ))}
-                  {accounts.filter(a => a.service === importForm.platform && a.isActive).length === 0 && (
-                    <SelectItem value="no-accounts" disabled>
-                      No active {importForm.platform === 'elevenlabs' ? 'ElevenLabs' : 'LiveKit'} accounts found
-                    </SelectItem>
-                  )}
                 </SelectContent>
               </Select>
             </div>
@@ -494,7 +460,7 @@ export default function Agents() {
                   type="button"
                   variant="outline"
                   onClick={handleSearchAgent}
-                  disabled={!importForm.agentId.trim() || !importForm.accountId || searchAgentMutation.isPending}
+                  disabled={!importForm.agentId.trim() || searchAgentMutation.isPending}
                   data-testid="button-search-agent"
                 >
                   {searchAgentMutation.isPending ? (
@@ -547,14 +513,6 @@ export default function Agents() {
               </Alert>
             )}
             
-            {!importForm.accountId && accounts.filter(a => a.service === importForm.platform).length === 0 && (
-              <Alert>
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>
-                  No {importForm.platform === 'elevenlabs' ? 'ElevenLabs' : 'LiveKit'} accounts configured. Please add an account in the Integrations page first.
-                </AlertDescription>
-              </Alert>
-            )}
             
             {searchedAgent && (
               <>
@@ -602,7 +560,7 @@ export default function Agents() {
               variant="outline"
               onClick={() => {
                 setIsImportAgentOpen(false);
-                setImportForm({ platform: "elevenlabs", agentId: "", accountId: "" });
+                setImportForm({ platform: "elevenlabs", agentId: "", accountId: "env" });
                 setSearchedAgent(null);
               }}
               data-testid="button-cancel-import"
