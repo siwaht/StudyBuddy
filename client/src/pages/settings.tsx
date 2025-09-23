@@ -27,25 +27,14 @@ export default function Settings() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="elevenlabs-key">ElevenLabs API Key</Label>
-                  <Input 
-                    id="elevenlabs-key" 
-                    type="password" 
-                    placeholder="sk-..." 
-                    data-testid="elevenlabs-api-key"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="livekit-key">LiveKit API Key</Label>
-                  <Input 
-                    id="livekit-key" 
-                    type="password" 
-                    placeholder="API..." 
-                    data-testid="livekit-api-key"
-                  />
-                </div>
+              <div className="space-y-2">
+                <Label htmlFor="elevenlabs-key">ElevenLabs API Key</Label>
+                <Input 
+                  id="elevenlabs-key" 
+                  type="password" 
+                  placeholder="sk-..." 
+                  data-testid="elevenlabs-api-key"
+                />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="webhook-url">Webhook Endpoint</Label>
