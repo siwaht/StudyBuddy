@@ -265,7 +265,7 @@ export class DatabaseStorage implements IStorage {
       },
     ]).returning();
 
-    // Seed accounts for ElevenLabs and LiveKit
+    // Seed accounts for ElevenLabs
     const seedAccounts = await db.insert(accounts).values([
       {
         name: "Production ElevenLabs",
@@ -365,7 +365,7 @@ export class DatabaseStorage implements IStorage {
       },
       {
         id: "C-1056",
-        agentId: supportRouterId,
+        agentId: ivrAssistantId,
         startTime: new Date(Date.now() - 1 * 60 * 60 * 1000),
         endTime: new Date(Date.now() - 1 * 60 * 60 * 1000 + 65 * 1000),
         duration: 65, // 1m 05s
@@ -390,7 +390,7 @@ export class DatabaseStorage implements IStorage {
       },
       {
         id: "C-1057",
-        agentId: customerServiceId,
+        agentId: salesBotId,
         startTime: new Date(Date.now() - 3 * 60 * 60 * 1000),
         endTime: new Date(Date.now() - 3 * 60 * 60 * 1000 + 3 * 60 * 1000),
         duration: 180, // 3m
@@ -769,8 +769,6 @@ export class DatabaseStorage implements IStorage {
     const allAgents = await db.select().from(agents)
       .where(inArray(agents.id, assignedAgentIds));
     
-    // No LiveKit rooms in the system
-    let activeRooms = [];
     
     // Get unique platforms for assigned agents
     const platforms = Array.from(new Set(allAgents.map(a => a.platform)));
@@ -795,7 +793,6 @@ export class DatabaseStorage implements IStorage {
         return agent?.platform === 'elevenlabs';
       }).length;
       
-      const livekitCalls = 0; // No LiveKit calls
       
       callVolumeData.push({
         time: date.toLocaleDateString('en-US', { weekday: 'short' }),
@@ -812,7 +809,7 @@ export class DatabaseStorage implements IStorage {
       totalCalls: allCalls.length,
       avgHandleTime,
       elevenLabsLatencyP95,
-      activeRooms: activeRooms.length,
+      activeRooms: 0, // No longer tracking rooms
       callVolumeData,
       recentCalls,
       platforms

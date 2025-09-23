@@ -18,7 +18,7 @@ export const users = pgTable("users", {
 export const agents = pgTable("agents", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
-  platform: varchar("platform", { enum: ["elevenlabs", "livekit"] }).notNull(),
+  platform: varchar("platform", { enum: ["elevenlabs"] }).notNull(),
   accountId: varchar("account_id"), // Reference to the account this agent belongs to
   externalId: text("external_id"), // Platform-specific agent ID
   description: text("description"),
@@ -36,7 +36,7 @@ export const agents = pgTable("agents", {
 export const calls = pgTable("calls", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   agentId: varchar("agent_id").references(() => agents.id).notNull(),
-  conversationId: text("conversation_id"), // ElevenLabs or LiveKit conversation ID (nullable for backward compatibility)
+  conversationId: text("conversation_id"), // ElevenLabs conversation ID
   startTime: timestamp("start_time").notNull(),
   endTime: timestamp("end_time"),
   duration: integer("duration"), // in seconds
@@ -63,7 +63,6 @@ export const performanceMetrics = pgTable("performance_metrics", {
   callId: varchar("call_id").references(() => calls.id).notNull(),
   speechToTextLatency: integer("stt_latency"), // in milliseconds
   elevenLabsLatency: integer("elevenlabs_latency"),
-  liveKitLatency: integer("livekit_latency"),
   totalLatency: integer("total_latency"),
   responseTime: integer("response_time"),
   audioQuality: decimal("audio_quality", { precision: 3, scale: 2 }),
@@ -77,14 +76,6 @@ export const performanceMetrics = pgTable("performance_metrics", {
   };
 });
 
-export const liveKitRooms = pgTable("livekit_rooms", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  roomId: text("room_id").notNull().unique(),
-  name: text("name").notNull(),
-  isActive: boolean("is_active").notNull().default(true),
-  participantCount: integer("participant_count").notNull().default(0),
-  createdAt: timestamp("created_at").notNull().default(sql`now()`),
-});
 
 // User-Agent assignments for multi-tenant access control
 export const userAgents = pgTable("user_agents", {
@@ -146,7 +137,7 @@ export const playgroundSessions = pgTable("playground_sessions", {
 export const accounts = pgTable("accounts", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull(), // User-friendly label like "Production ElevenLabs"
-  service: varchar("service", { enum: ["elevenlabs", "livekit"] }).notNull(),
+  service: varchar("service", { enum: ["elevenlabs"] }).notNull(),
   encryptedApiKey: text("encrypted_api_key").notNull(),
   isActive: boolean("is_active").notNull().default(true),
   lastSynced: timestamp("last_synced"), // When we last synced data from this account
@@ -174,7 +165,7 @@ export const insertAgentSchema = createInsertSchema(agents).omit({
 export const selectAgentSchema = z.object({
   id: z.string(),
   name: z.string(),
-  platform: z.enum(["elevenlabs", "livekit"]),
+  platform: z.enum(["elevenlabs"]),
   accountId: z.string().nullable().optional(),
   externalId: z.string().nullable().optional(),
   description: z.string().nullable().optional(),
@@ -193,10 +184,6 @@ export const insertPerformanceMetricSchema = createInsertSchema(performanceMetri
   timestamp: true,
 });
 
-export const insertLiveKitRoomSchema = createInsertSchema(liveKitRooms).omit({
-  id: true,
-  createdAt: true,
-});
 
 export const insertUserAgentSchema = createInsertSchema(userAgents).omit({
   id: true,
@@ -238,8 +225,6 @@ export type InsertCall = z.infer<typeof insertCallSchema>;
 export type PerformanceMetric = typeof performanceMetrics.$inferSelect;
 export type InsertPerformanceMetric = z.infer<typeof insertPerformanceMetricSchema>;
 
-export type LiveKitRoom = typeof liveKitRooms.$inferSelect;
-export type InsertLiveKitRoom = z.infer<typeof insertLiveKitRoomSchema>;
 
 export type UserAgent = typeof userAgents.$inferSelect;
 export type InsertUserAgent = z.infer<typeof insertUserAgentSchema>;
