@@ -36,6 +36,7 @@ export const agents = pgTable("agents", {
 export const calls = pgTable("calls", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   agentId: varchar("agent_id").references(() => agents.id).notNull(),
+  conversationId: text("conversation_id"), // ElevenLabs or LiveKit conversation ID (nullable for backward compatibility)
   startTime: timestamp("start_time").notNull(),
   endTime: timestamp("end_time"),
   duration: integer("duration"), // in seconds
@@ -49,6 +50,7 @@ export const calls = pgTable("calls", {
 }, (table) => {
   return {
     agentIdIdx: index("calls_agent_id_idx").on(table.agentId),
+    conversationIdIdx: index("calls_conversation_id_idx").on(table.conversationId),
     startTimeIdx: index("calls_start_time_idx").on(table.startTime),
     createdAtIdx: index("calls_created_at_idx").on(table.createdAt),
     sentimentIdx: index("calls_sentiment_idx").on(table.sentiment),

@@ -54,6 +54,13 @@ app.use('/api/', generalLimiter);
 // Apply stricter rate limiting to authentication routes
 app.use('/api/auth/', authLimiter);
 
+// Capture raw body for webhook signature verification
+app.use('/api/webhooks/elevenlabs', express.raw({ 
+  type: 'application/json',
+  limit: '10mb' // Limit webhook payload size
+}));
+
+// Parse JSON for all other routes
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 

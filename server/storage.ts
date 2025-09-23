@@ -175,6 +175,22 @@ export interface IStorage {
   createPlaygroundSession(session: InsertPlaygroundSession): Promise<PlaygroundSession>;
   updatePlaygroundSession(id: string, updates: Partial<PlaygroundSession>): Promise<PlaygroundSession | undefined>;
 
+  // Webhook-specific methods
+  createOrUpdateCallFromWebhook(callData: {
+    agentId: string;
+    conversationId: string;
+    startTime: Date;
+    endTime: Date;
+    duration: number;
+    transcript: any[];
+    analysis: any;
+    sentiment: string;
+    metadata: any;
+    recordingUrl: string | null;
+  }): Promise<Call>;
+  updateCallRecording(conversationId: string, recordingUrl: string): Promise<void>;
+  getCallByConversationId(conversationId: string): Promise<Call | undefined>;
+
   // Advanced Sync Operations
   syncAgent(agentId: string, userId: string): Promise<{
     conversations: number;
@@ -848,11 +864,9 @@ export class DatabaseStorage implements IStorage {
     let activeRooms = [];
     if (userLiveKitAgentIds.length > 0) {
       // Only query rooms if user has LiveKit agents
+      // Note: liveKitRooms doesn't have agentId field, so we just get active rooms
       activeRooms = await db.select().from(liveKitRooms)
-        .where(and(
-          eq(liveKitRooms.isActive, true),
-          inArray(liveKitRooms.agentId, userLiveKitAgentIds)
-        ));
+        .where(eq(liveKitRooms.isActive, true));
     }
     
     // Get unique platforms for assigned agents
@@ -1327,7 +1341,7 @@ export class DatabaseStorage implements IStorage {
           }
           // Fallback - if we can't parse it properly, skip it
           return null;
-        }).filter(entry => entry !== null); // Remove null entries
+        }).filter((entry: any) => entry !== null); // Remove null entries
       }
 
       // Prepare the call data - directly insert with custom ID
@@ -1540,6 +1554,86 @@ export class DatabaseStorage implements IStorage {
       .where(eq(playgroundSessions.id, id))
       .returning();
     return updated || undefined;
+  }
+
+  // Webhook-specific methods
+  async createOrUpdateCallFromWebhook(callData: {
+    agentId: string;
+    conversationId: string;
+    startTime: Date;
+    endTime: Date;
+    duration: number;
+    transcript: any[];
+    analysis: any;
+    sentiment: string;
+    metadata: any;
+    recordingUrl: string | null;
+  }): Promise<Call> {
+    try {
+      // First, try to find an existing call with this conversationId
+      const [existingCall] = await db.select().from(calls)
+        .where(eq(calls.conversationId, callData.conversationId))
+        .limit(1);
+
+      if (existingCall) {
+        // Update existing call
+        const [updated] = await db.update(calls)
+          .set({
+            startTime: callData.startTime,
+            endTime: callData.endTime,
+            duration: callData.duration,
+            transcript: callData.transcript,
+            analysis: callData.analysis,
+            sentiment: callData.sentiment as 'positive' | 'negative' | 'neutral',
+            metadata: callData.metadata,
+            recordingUrl: callData.recordingUrl || existingCall.recordingUrl
+          })
+          .where(eq(calls.id, existingCall.id))
+          .returning();
+        return updated;
+      } else {
+        // Create new call
+        const [created] = await db.insert(calls).values({
+          agentId: callData.agentId,
+          conversationId: callData.conversationId,
+          startTime: callData.startTime,
+          endTime: callData.endTime,
+          duration: callData.duration,
+          transcript: callData.transcript,
+          analysis: callData.analysis,
+          sentiment: callData.sentiment as 'positive' | 'negative' | 'neutral',
+          metadata: callData.metadata,
+          recordingUrl: callData.recordingUrl
+        }).returning();
+        return created;
+      }
+    } catch (error) {
+      console.error('Error creating/updating call from webhook:', error);
+      throw error;
+    }
+  }
+
+  async updateCallRecording(conversationId: string, recordingUrl: string): Promise<void> {
+    try {
+      await db.update(calls)
+        .set({ recordingUrl })
+        .where(eq(calls.conversationId, conversationId));
+    } catch (error) {
+      console.error('Error updating call recording:', error);
+      throw error;
+    }
+  }
+
+  async getCallByConversationId(conversationId: string): Promise<Call | undefined> {
+    try {
+      const [call] = await db.select().from(calls)
+        .where(eq(calls.conversationId, conversationId))
+        .limit(1);
+      return call || undefined;
+    } catch (error) {
+      console.error('Error getting call by conversation ID:', error);
+      return undefined;
+    }
   }
 
   // Advanced Sync Operations

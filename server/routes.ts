@@ -8,6 +8,13 @@ import * as livekit from "./livekit";
 import { elevenLabsIntegration } from "./integrations/elevenlabs";
 import { elevenlabsService } from "./services/elevenlabs";
 import { encrypt, decrypt } from "./utils/crypto";
+import * as fs from "fs";
+import * as path from "path";
+import { fileURLToPath } from "url";
+import { dirname } from "path";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Authentication routes
@@ -2025,6 +2032,285 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ 
         message: error.message || "Failed to import agents" 
       });
+    }
+  });
+
+  // Sync Conversations from ElevenLabs
+  app.post("/api/agents/:agentId/sync-conversations", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { agentId } = req.params;
+      
+      // Verify user has access to this agent
+      const agent = await storage.getAgent(req.user!.id, agentId);
+      if (!agent) {
+        return res.status(404).json({ message: "Agent not found" });
+      }
+      
+      if (agent.platform !== 'elevenlabs') {
+        return res.status(400).json({ message: "This agent is not an ElevenLabs agent" });
+      }
+      
+      if (!agent.externalId) {
+        return res.status(400).json({ message: "Agent has no external ID configured" });
+      }
+      
+      // Get the API key
+      const apiKey = await elevenLabsIntegration.getApiKey(agent.accountId || undefined);
+      if (!apiKey) {
+        return res.status(400).json({ message: "ElevenLabs API key not configured" });
+      }
+      
+      // Fetch conversations from ElevenLabs API
+      const response = await fetch(
+        `https://api.elevenlabs.io/v1/convai/conversations?agent_id=${agent.externalId}`,
+        {
+          method: 'GET',
+          headers: {
+            'xi-api-key': apiKey,
+          },
+        }
+      );
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch conversations: ${response.status} ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      const conversations = data.conversations || [];
+      
+      console.log(`Found ${conversations.length} conversations for agent ${agent.name}`);
+      
+      let imported = 0;
+      let updated = 0;
+      let failed = 0;
+      
+      for (const conversation of conversations) {
+        try {
+          // Prepare call data
+          const duration = conversation.metadata?.end_timestamp && conversation.metadata?.start_timestamp
+            ? Math.round((conversation.metadata.end_timestamp - conversation.metadata.start_timestamp) / 1000)
+            : 0;
+          
+          const callData = {
+            agentId: agent.id,
+            conversationId: conversation.conversation_id,
+            startTime: conversation.metadata?.start_timestamp ? new Date(conversation.metadata.start_timestamp * 1000) : new Date(),
+            endTime: conversation.metadata?.end_timestamp ? new Date(conversation.metadata.end_timestamp * 1000) : new Date(),
+            duration,
+            transcript: conversation.transcript || [],
+            analysis: conversation.analysis || {},
+            sentiment: conversation.analysis?.sentiment || 'neutral',
+            metadata: {
+              ...conversation.metadata,
+              agent_id: conversation.agent_id,
+              status: conversation.status
+            },
+            recordingUrl: conversation.recording_url || conversation.audio_url || null
+          };
+          
+          // Check if call already exists before importing
+          const existingCall = await storage.getCallByConversationId(conversation.conversation_id);
+          const result = await storage.createOrUpdateCallFromWebhook(callData);
+          
+          if (result.id) {
+            if (!existingCall) {
+              imported++;
+            } else {
+              updated++;
+            }
+          }
+        } catch (error) {
+          console.error(`Failed to import conversation ${conversation.conversation_id}:`, error);
+          failed++;
+        }
+      }
+      
+      res.json({
+        message: `Sync completed for agent ${agent.name}`,
+        total: conversations.length,
+        imported,
+        updated,
+        failed
+      });
+      
+    } catch (error: any) {
+      console.error('Error syncing conversations:', error);
+      res.status(500).json({ 
+        message: error.message || "Failed to sync conversations" 
+      });
+    }
+  });
+
+  // ElevenLabs Webhook Endpoints
+  app.post("/api/webhooks/elevenlabs", async (req: Request, res: Response) => {
+    try {
+      // Parse the raw body
+      let body: any;
+      let rawBody: string;
+      
+      if (Buffer.isBuffer(req.body)) {
+        rawBody = req.body.toString('utf8');
+        body = JSON.parse(rawBody);
+      } else {
+        // Fallback if middleware didn't capture raw body
+        body = req.body;
+        rawBody = JSON.stringify(body);
+      }
+      
+      // Verify webhook signature for security
+      const signature = req.headers['elevenlabs-signature'] as string;
+      const webhookSecret = process.env.ELEVENLABS_WEBHOOK_SECRET;
+      
+      if (webhookSecret && signature) {
+        // Parse signature format: t={timestamp},v1={hash}
+        const parts = signature.split(',');
+        const timestamp = parts[0]?.split('=')[1];
+        const hash = parts[1]?.split('=')[1];
+        
+        if (timestamp && hash) {
+          // Verify signature using HMAC SHA256 with raw body
+          const crypto = await import('crypto');
+          const expectedHash = crypto
+            .createHmac('sha256', webhookSecret)
+            .update(`${timestamp}.${rawBody}`)
+            .digest('hex');
+          
+          // Use constant-time comparison to prevent timing attacks
+          const expectedBuffer = Buffer.from(expectedHash, 'hex');
+          const hashBuffer = Buffer.from(hash, 'hex');
+          
+          if (expectedBuffer.length !== hashBuffer.length || 
+              !crypto.timingSafeEqual(expectedBuffer, hashBuffer)) {
+            console.warn('Invalid webhook signature');
+            return res.status(401).json({ error: "Invalid signature" });
+          }
+          
+          // Check timestamp to prevent replay attacks (within 5 minutes)
+          const currentTime = Math.floor(Date.now() / 1000);
+          if (currentTime - parseInt(timestamp) > 300) {
+            return res.status(401).json({ error: "Request timestamp too old" });
+          }
+        }
+      } else if (process.env.NODE_ENV === 'production') {
+        // In production, require webhook signature
+        console.warn('Webhook received without signature in production');
+        return res.status(401).json({ error: "Webhook signature required" });
+      }
+      
+      const { type, data, event_timestamp } = body;
+
+      if (!type || !data) {
+        return res.status(400).json({ error: "Invalid webhook payload" });
+      }
+
+      console.log(`Received ElevenLabs webhook: ${type} at ${new Date(event_timestamp * 1000).toISOString()}`);
+
+      if (type === "post_call_transcription") {
+        // Handle transcription webhook
+        const {
+          agent_id,
+          conversation_id,
+          status,
+          transcript,
+          metadata,
+          analysis,
+          user_id,
+          conversation_initiation_client_data
+        } = data;
+
+        // Calculate duration from metadata
+        const duration = metadata?.end_timestamp && metadata?.start_timestamp
+          ? Math.round((metadata.end_timestamp - metadata.start_timestamp) / 1000)
+          : 0;
+
+        // Create or update call record
+        const callData = {
+          agentId: agent_id,
+          conversationId: conversation_id,
+          startTime: metadata?.start_timestamp ? new Date(metadata.start_timestamp * 1000) : new Date(),
+          endTime: metadata?.end_timestamp ? new Date(metadata.end_timestamp * 1000) : new Date(),
+          duration,
+          transcript: transcript || [],
+          analysis: analysis || {},
+          sentiment: analysis?.sentiment || 'neutral',
+          metadata: {
+            ...metadata,
+            user_id,
+            dynamic_variables: conversation_initiation_client_data?.dynamic_variables,
+            language: conversation_initiation_client_data?.conversation_config_override?.agent?.language
+          },
+          recordingUrl: null // Will be updated by audio webhook if available
+        };
+
+        // Store the call data using webhook-specific method
+        await storage.createOrUpdateCallFromWebhook(callData);
+
+        console.log(`Processed transcription webhook for conversation ${conversation_id}`);
+      } else if (type === "post_call_audio") {
+        // Handle audio webhook
+        const { conversation_id, agent_id, full_audio } = data;
+
+        if (full_audio) {
+          // Create recordings directory if it doesn't exist
+          const recordingsDir = path.join(__dirname, '..', 'recordings');
+          if (!fs.existsSync(recordingsDir)) {
+            fs.mkdirSync(recordingsDir, { recursive: true });
+          }
+
+          // Save the audio file
+          const fileName = `conversation_${conversation_id}.mp3`;
+          const filePath = path.join(recordingsDir, fileName);
+          const audioBuffer = Buffer.from(full_audio, 'base64');
+          fs.writeFileSync(filePath, audioBuffer);
+
+          // Update call record with recording URL
+          await storage.updateCallRecording(conversation_id, `/api/recordings/${fileName}`);
+
+          console.log(`Saved audio for conversation ${conversation_id}`);
+        }
+      }
+
+      res.status(200).json({ status: "ok" });
+    } catch (error: any) {
+      console.error('Error processing ElevenLabs webhook:', error);
+      res.status(500).json({ error: "Failed to process webhook" });
+    }
+  });
+
+  // Serve recordings with proper access control
+  app.get("/api/recordings/:callId/audio", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { callId } = req.params;
+      
+      // Get the call and verify user has access
+      const call = await storage.getCall(req.user!.id, callId);
+      if (!call) {
+        return res.status(404).json({ message: "Recording not found or access denied" });
+      }
+      
+      if (!call.recordingUrl) {
+        return res.status(404).json({ message: "No recording available for this call" });
+      }
+      
+      // Extract filename from recordingUrl
+      const filename = call.recordingUrl.split('/').pop();
+      if (!filename || filename.includes('..') || filename.includes('/')) {
+        return res.status(400).json({ message: "Invalid recording reference" });
+      }
+
+      const filePath = path.join(__dirname, '..', 'recordings', filename);
+      
+      if (!fs.existsSync(filePath)) {
+        return res.status(404).json({ message: "Recording file not found" });
+      }
+
+      // Set appropriate headers
+      res.setHeader('Content-Type', 'audio/mpeg');
+      res.setHeader('Content-Disposition', `attachment; filename="call_${callId}.mp3"`);
+      res.sendFile(filePath);
+    } catch (error) {
+      console.error('Error serving recording:', error);
+      res.status(500).json({ message: "Failed to serve recording" });
     }
   });
 
