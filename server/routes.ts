@@ -1,6 +1,8 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
+import { cache, cacheKeys, cacheTTL } from "./cache";
+import { getPaginationParams, getPaginationMeta } from "./queryOptimizer";
 import { insertUserSchema, insertAgentSchema, insertCallSchema, type Account } from "@shared/schema";
 import { hashPassword, validatePassword, requireAuth, requireAdmin } from "./auth";
 import { z } from "zod";
@@ -136,7 +138,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Dashboard routes - Protected
   app.get("/api/dashboard/stats", requireAuth, async (req: Request, res: Response) => {
     try {
-      const stats = await storage.getDashboardStats(req.user!.id);
+      const userId = req.user!.id;
+      const cacheKey = cacheKeys.dashboardStats(userId);
+      
+      // Check cache first
+      let stats = cache.get(cacheKey);
+      
+      if (!stats) {
+        // Cache miss - fetch from database
+        stats = await storage.getDashboardStats(userId);
+        // Store in cache for 5 minutes
+        cache.set(cacheKey, stats, cacheTTL.dashboardStats);
+      }
       
       // Set cache headers for dashboard stats (cache for 30 seconds)
       res.set({
@@ -154,9 +167,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // User routes - Admin only
   app.get("/api/users", requireAuth, requireAdmin, async (req: Request, res: Response) => {
     try {
-      const users = await storage.getAllUsers();
+      // Get pagination parameters
+      const { limit, offset, page } = getPaginationParams(req);
+      
+      const allUsers = await storage.getAllUsers();
+      const total = allUsers.length;
+      const users = allUsers.slice(offset, offset + limit);
       const usersWithoutPasswords = users.map(({ password, ...user }) => user);
-      res.json(usersWithoutPasswords);
+      
+      // Add pagination metadata
+      const paginationMeta = getPaginationMeta(
+        total,
+        page,
+        limit,
+        `/api/users`
+      );
+      
+      res.json({
+        data: usersWithoutPasswords,
+        pagination: paginationMeta
+      });
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch users" });
     }
@@ -529,7 +559,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Call routes - Protected with data isolation
   app.get("/api/calls", requireAuth, async (req: Request, res: Response) => {
     try {
-      const calls = await storage.getAllCalls(req.user!.id);
+      // Get pagination parameters
+      const { limit, offset, page } = getPaginationParams(req);
+      
+      // Get paginated calls
+      const allCalls = await storage.getAllCalls(req.user!.id);
+      const total = allCalls.length;
+      const calls = allCalls.slice(offset, offset + limit);
       
       // Get agents to include in response (only the ones user has access to)
       const agents = await storage.getAllAgents(req.user!.id);
@@ -564,7 +600,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         'ETag': `W/"calls-${req.user!.id}-${Date.now()}"`,
       });
       
-      res.json(callsWithAgents);
+      // Add pagination metadata
+      const paginationMeta = getPaginationMeta(
+        total,
+        page,
+        limit,
+        `/api/calls`
+      );
+      
+      res.json({
+        data: callsWithAgents,
+        pagination: paginationMeta
+      });
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch calls" });
     }

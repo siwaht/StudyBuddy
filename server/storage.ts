@@ -14,7 +14,7 @@ import {
 import { db } from "./db";
 import { eq, and, or, sql, desc, asc, between, like, inArray, gte, lte, not, isNull, isNotNull } from "drizzle-orm";
 import { randomUUID } from "crypto";
-import bcrypt from "bcryptjs";
+import bcrypt from "bcrypt";
 
 export interface IStorage {
   // Users

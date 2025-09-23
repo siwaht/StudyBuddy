@@ -2,11 +2,18 @@ import express, { type Request, Response, NextFunction } from "express";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import compression from "compression";
-import rateLimit from "express-rate-limit";
 import { pool } from "./db";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { authenticate } from "./auth";
+import { 
+  userRateLimiter, 
+  authRateLimiter, 
+  analyticsRateLimiter, 
+  searchRateLimiter, 
+  webhookRateLimiter,
+  mutationRateLimiter 
+} from "./rateLimiter";
 
 const app = express();
 
@@ -29,30 +36,23 @@ app.use(compression({
   level: 6, // Balance between compression ratio and speed
 }));
 
-// Configure rate limiting to prevent abuse
-const generalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // Limit each IP to 100 requests per windowMs
-  message: 'Too many requests from this IP, please try again later.',
-  standardHeaders: true, // Return rate limit info in headers
-  legacyHeaders: false, // Disable X-RateLimit-* headers
+// Apply per-user rate limiting to all API routes
+app.use('/api/', userRateLimiter);
+
+// Apply specific rate limiters to different endpoint types
+app.use('/api/auth/', authRateLimiter);
+app.use('/api/analytics/', analyticsRateLimiter);
+app.use('/api/calls/search', searchRateLimiter);
+app.use('/api/webhooks/', webhookRateLimiter);
+
+// Apply mutation rate limiter to POST/PATCH/DELETE operations
+app.use('/api/', (req, res, next) => {
+  if (['POST', 'PATCH', 'DELETE', 'PUT'].includes(req.method)) {
+    mutationRateLimiter(req, res, next);
+  } else {
+    next();
+  }
 });
-
-// Stricter rate limiting for auth endpoints
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10, // Limit each IP to 10 auth requests per windowMs
-  message: 'Too many authentication attempts, please try again later.',
-  skipSuccessfulRequests: true, // Don't count successful requests
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-
-// Apply general rate limiting to all routes
-app.use('/api/', generalLimiter);
-
-// Apply stricter rate limiting to authentication routes
-app.use('/api/auth/', authLimiter);
 
 // Capture raw body for webhook signature verification
 app.use('/api/webhooks/elevenlabs', express.raw({ 
