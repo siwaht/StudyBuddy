@@ -421,7 +421,6 @@ export class DatabaseStorage implements IStorage {
         agentId: call.agentId,
         callId: call.id,
         speechToTextLatency: (call.analysis as any)?.latencyWaterfall?.speechToText || 0,
-        elevenLabsLatency: (call.analysis as any)?.latencyWaterfall?.elevenLabsTTS || 0,
         totalLatency: Object.values((call.analysis as any)?.latencyWaterfall || {}).reduce((a: number, b: any) => a + b, 0),
         responseTime: 95,
         audioQuality: "4.6",
@@ -757,13 +756,13 @@ export class DatabaseStorage implements IStorage {
     const metrics = await db.select().from(performanceMetrics)
       .where(inArray(performanceMetrics.agentId, assignedAgentIds));
     
-    const elevenLabsLatencies = metrics
-      .map(m => m.elevenLabsLatency || 0)
+    const totalLatencies = metrics
+      .map(m => m.totalLatency || 0)
       .filter(l => l > 0)
       .sort((a, b) => a - b);
     
-    const p95Index = Math.floor(elevenLabsLatencies.length * 0.95);
-    const elevenLabsLatencyP95 = elevenLabsLatencies[p95Index] || 0;
+    const p95Index = Math.floor(totalLatencies.length * 0.95);
+    const elevenLabsLatencyP95 = totalLatencies[p95Index] || 0;
 
     // Get agents for volume data (moved up to use for filtering)
     const allAgents = await db.select().from(agents)

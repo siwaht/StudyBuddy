@@ -54,6 +54,9 @@ export const calls = pgTable("calls", {
     startTimeIdx: index("calls_start_time_idx").on(table.startTime),
     createdAtIdx: index("calls_created_at_idx").on(table.createdAt),
     sentimentIdx: index("calls_sentiment_idx").on(table.sentiment),
+    conversationAgentIdx: index("idx_calls_conversation_agent").on(table.conversationId, table.agentId),
+    agentStartTimeIdx: index("idx_calls_agent_starttime").on(table.agentId, table.startTime),
+    sentimentOutcomeIdx: index("idx_calls_sentiment_outcome").on(table.sentiment, table.outcome),
   };
 });
 
@@ -62,7 +65,6 @@ export const performanceMetrics = pgTable("performance_metrics", {
   agentId: varchar("agent_id").references(() => agents.id).notNull(),
   callId: varchar("call_id").references(() => calls.id).notNull(),
   speechToTextLatency: integer("stt_latency"), // in milliseconds
-  elevenLabsLatency: integer("elevenlabs_latency"),
   totalLatency: integer("total_latency"),
   responseTime: integer("response_time"),
   audioQuality: decimal("audio_quality", { precision: 3, scale: 2 }),
@@ -73,6 +75,8 @@ export const performanceMetrics = pgTable("performance_metrics", {
     agentIdIdx: index("performance_metrics_agent_id_idx").on(table.agentId),
     callIdIdx: index("performance_metrics_call_id_idx").on(table.callId),
     timestampIdx: index("performance_metrics_timestamp_idx").on(table.timestamp),
+    agentTimestampIdx: index("idx_perf_agent_timestamp").on(table.agentId, table.timestamp),
+    totalLatencyIdx: index("idx_perf_total_latency").on(table.totalLatency),
   };
 });
 
@@ -118,6 +122,7 @@ export const syncHistory = pgTable("sync_history", {
   return {
     agentIdIdx: index("sync_history_agent_id_idx").on(table.agentId),
     statusIdx: index("sync_history_status_idx").on(table.status),
+    agentCompletedIdx: index("idx_sync_agent_completed").on(table.agentId, table.completedAt),
   };
 });
 
