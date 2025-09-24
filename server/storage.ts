@@ -15,6 +15,7 @@ import { db } from "./db";
 import { eq, and, or, sql, desc, asc, between, like, inArray, gte, lte, not, isNull, isNotNull } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import bcrypt from "bcrypt";
+import { cache, cacheKeys, cacheTTL } from "./cache";
 
 export interface IStorage {
   // Users
@@ -593,6 +594,11 @@ export class DatabaseStorage implements IStorage {
 
   async createAgent(agent: InsertAgent): Promise<Agent> {
     const [created] = await db.insert(agents).values(agent).returning();
+    
+    // Invalidate related caches
+    await cache.invalidatePattern("user:agents:*");
+    await cache.invalidatePattern("dashboard:stats:*");
+    
     return created;
   }
 
@@ -660,6 +666,11 @@ export class DatabaseStorage implements IStorage {
 
   async createCall(call: InsertCall): Promise<Call> {
     const [created] = await db.insert(calls).values(call).returning();
+    
+    // Invalidate related caches
+    await cache.invalidatePattern("dashboard:stats:*");
+    await cache.invalidatePattern("calls:search:*");
+    
     return created;
   }
 
@@ -727,10 +738,29 @@ export class DatabaseStorage implements IStorage {
     recentCalls: Call[];
     platforms: string[];
   }> {
+    // Check cache first
+    const cacheKey = cacheKeys.dashboardStats(userId);
+    try {
+      const cached = await cache.get<{
+        totalCalls: number;
+        avgHandleTime: string;
+        elevenLabsLatencyP95: number;
+        activeRooms: number;
+        callVolumeData: Array<{ time: string; elevenlabs: number; }>;
+        recentCalls: Call[];
+        platforms: string[];
+      }>(cacheKey);
+      if (cached && cached.totalCalls !== undefined) {
+        return cached;
+      }
+    } catch (error) {
+      console.error('Cache get error for dashboard stats:', error);
+    }
+
     const assignedAgentIds = await this.getAssignedAgentIds(userId);
     
     if (assignedAgentIds.length === 0) {
-      return {
+      const emptyStats = {
         totalCalls: 0,
         avgHandleTime: "0s",
         elevenLabsLatencyP95: 0,
@@ -739,6 +769,10 @@ export class DatabaseStorage implements IStorage {
         recentCalls: [],
         platforms: []
       };
+      
+      // Cache empty stats for shorter duration
+      await cache.set(cacheKey, emptyStats, 60); // 1 minute for empty state
+      return emptyStats;
     }
 
     // Get all calls for assigned agents
@@ -804,7 +838,7 @@ export class DatabaseStorage implements IStorage {
       .sort((a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime())
       .slice(0, 5);
 
-    return {
+    const stats = {
       totalCalls: allCalls.length,
       avgHandleTime,
       elevenLabsLatencyP95,
@@ -813,6 +847,15 @@ export class DatabaseStorage implements IStorage {
       recentCalls,
       platforms
     };
+
+    // Cache the results
+    try {
+      await cache.set(cacheKey, stats, cacheTTL.dashboardStats);
+    } catch (error) {
+      console.error('Cache set error for dashboard stats:', error);
+    }
+    
+    return stats;
   }
 
   // Search calls

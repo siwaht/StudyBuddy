@@ -49,11 +49,14 @@ export const calls = pgTable("calls", {
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
 }, (table) => {
   return {
+    // Essential indexes for common query patterns
     agentIdIdx: index("calls_agent_id_idx").on(table.agentId),
     conversationIdIdx: index("calls_conversation_id_idx").on(table.conversationId),
     startTimeIdx: index("calls_start_time_idx").on(table.startTime),
     createdAtIdx: index("calls_created_at_idx").on(table.createdAt),
     sentimentIdx: index("calls_sentiment_idx").on(table.sentiment),
+    
+    // Composite indexes for specific query patterns used in the app
     conversationAgentIdx: index("idx_calls_conversation_agent").on(table.conversationId, table.agentId),
     agentStartTimeIdx: index("idx_calls_agent_starttime").on(table.agentId, table.startTime),
     sentimentOutcomeIdx: index("idx_calls_sentiment_outcome").on(table.sentiment, table.outcome),
@@ -72,11 +75,14 @@ export const performanceMetrics = pgTable("performance_metrics", {
   timestamp: timestamp("timestamp").notNull().default(sql`now()`),
 }, (table) => {
   return {
+    // Essential indexes for common query patterns
     agentIdIdx: index("performance_metrics_agent_id_idx").on(table.agentId),
     callIdIdx: index("performance_metrics_call_id_idx").on(table.callId),
     timestampIdx: index("performance_metrics_timestamp_idx").on(table.timestamp),
-    agentTimestampIdx: index("idx_perf_agent_timestamp").on(table.agentId, table.timestamp),
     totalLatencyIdx: index("idx_perf_total_latency").on(table.totalLatency),
+    
+    // Composite index for analytics queries
+    agentTimestampIdx: index("idx_perf_agent_timestamp").on(table.agentId, table.timestamp),
   };
 });
 
