@@ -1,12 +1,7 @@
 const CACHE_NAME = 'agent-platform-v1';
 const STATIC_ASSETS = [
   '/',
-  '/dashboard',
-  '/calls',
-  '/analytics',
-  '/agents',
-  '/manifest.json',
-  // Note: In a real implementation, we would also cache CSS, JS, and other static assets
+  '/manifest.json'
 ];
 
 // Install event - cache core assets
@@ -92,7 +87,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
   
-  // Static assets - cache first
+  // Static assets - cache first with navigation fallback
   event.respondWith(
     caches.match(request)
       .then((cachedResponse) => {
@@ -111,6 +106,13 @@ self.addEventListener('fetch', (event) => {
                 });
             }
             return response;
+          })
+          .catch(() => {
+            // Offline navigation fallback - serve index.html for navigation requests
+            if (request.mode === 'navigate') {
+              return caches.match('/');
+            }
+            throw new Error('Network error and no cache available');
           });
       })
   );

@@ -82,8 +82,10 @@ export function usePWA() {
     return () => {
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
       window.removeEventListener('appinstalled', handleAppInstalled);
-      if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.removeEventListener('controllerchange', handleSWUpdate);
+      window.removeEventListener('sw-update-available', handleSWUpdate);
+      
+      if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+        navigator.serviceWorker.removeEventListener('controllerchange', handleControllerChange);
       }
     };
   }, [toast]);
