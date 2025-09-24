@@ -11,13 +11,17 @@ import { Progress } from "@/components/ui/progress";
 import { 
   TrendingUp, TrendingDown, Clock, Users, Phone, Bot, 
   Calendar as CalendarIcon, Download, ArrowUpRight, ArrowDownRight,
-  BarChart3, LineChart as LineChartIcon, PieChart as PieChartIcon, Activity
+  BarChart3, LineChart as LineChartIcon, PieChart as PieChartIcon, Activity,
+  DollarSign, Target, Zap
 } from "lucide-react";
 import { 
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, 
   Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend,
   Area, AreaChart
 } from "recharts";
+import CostAnalysis from "@/components/analytics/cost-analysis";
+import PerformanceDashboard from "@/components/analytics/performance-dashboard";
+import TrendAnalysis from "@/components/analytics/trend-analysis";
 
 interface AnalyticsData {
   metrics: {
@@ -386,16 +390,36 @@ export default function Analytics() {
         </Card>
       </div>
 
-      {/* Detailed Analytics Tabs */}
-      <Tabs defaultValue="trends" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="trends">Call Trends</TabsTrigger>
-          <TabsTrigger value="sentiment">Sentiment Analysis</TabsTrigger>
-          <TabsTrigger value="agents">Agent Performance</TabsTrigger>
-          <TabsTrigger value="peak">Peak Hours</TabsTrigger>
+      {/* Advanced Analytics Tabs */}
+      <Tabs defaultValue="overview" className="space-y-4">
+        <TabsList className="grid w-full grid-cols-6">
+          <TabsTrigger value="overview" data-testid="tab-overview">
+            <BarChart3 className="h-4 w-4 mr-2" />
+            Overview
+          </TabsTrigger>
+          <TabsTrigger value="costs" data-testid="tab-costs">
+            <DollarSign className="h-4 w-4 mr-2" />
+            Cost Analysis
+          </TabsTrigger>
+          <TabsTrigger value="performance" data-testid="tab-performance">
+            <Zap className="h-4 w-4 mr-2" />
+            Performance
+          </TabsTrigger>
+          <TabsTrigger value="trends" data-testid="tab-trends">
+            <TrendingUp className="h-4 w-4 mr-2" />
+            Trend Analysis
+          </TabsTrigger>
+          <TabsTrigger value="sentiment" data-testid="tab-sentiment">
+            <Target className="h-4 w-4 mr-2" />
+            Sentiment
+          </TabsTrigger>
+          <TabsTrigger value="agents" data-testid="tab-agents">
+            <Bot className="h-4 w-4 mr-2" />
+            Agents
+          </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="trends" className="space-y-4">
+        <TabsContent value="overview" className="space-y-4">
           <Card>
             <CardHeader>
               <CardTitle>Call Volume Over Time</CardTitle>
@@ -443,6 +467,18 @@ export default function Analytics() {
               </ResponsiveContainer>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="costs" className="space-y-4">
+          <CostAnalysis dateRange={customDateRange} />
+        </TabsContent>
+
+        <TabsContent value="performance" className="space-y-4">
+          <PerformanceDashboard dateRange={customDateRange} />
+        </TabsContent>
+
+        <TabsContent value="trends" className="space-y-4">
+          <TrendAnalysis dateRange={customDateRange} />
         </TabsContent>
 
         <TabsContent value="sentiment" className="space-y-4">
@@ -613,46 +649,6 @@ export default function Analytics() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="peak" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Peak Hours Analysis</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={350}>
-                <BarChart data={analyticsData?.peakHours || []}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis 
-                    dataKey="hour" 
-                    tickFormatter={(value) => `${value}:00`}
-                  />
-                  <YAxis yAxisId="left" />
-                  <YAxis yAxisId="right" orientation="right" />
-                  <Tooltip 
-                    formatter={(value: any, name: string) => {
-                      if (name === 'Calls') return value;
-                      return `${value.toFixed(0)}s`;
-                    }}
-                  />
-                  <Legend />
-                  <Bar 
-                    yAxisId="left"
-                    dataKey="calls" 
-                    fill="#3B82F6" 
-                    name="Calls"
-                  />
-                  <Line 
-                    yAxisId="right"
-                    type="monotone"
-                    dataKey="avgWaitTime" 
-                    stroke="#EF4444" 
-                    name="Avg Wait Time (s)"
-                  />
-                </BarChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-        </TabsContent>
       </Tabs>
     </div>
   );

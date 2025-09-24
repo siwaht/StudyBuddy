@@ -828,6 +828,273 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Advanced Analytics: Cost Analysis
+  app.get("/api/analytics/costs", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const dateFrom = req.query.dateFrom ? new Date(req.query.dateFrom as string) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      const dateTo = req.query.dateTo ? new Date(req.query.dateTo as string) : new Date();
+      const timeGrouping = req.query.timeGrouping as 'day' | 'week' | 'month' || 'day';
+      
+      // Mock enhanced cost analysis data - would be replaced with real implementation
+      const costAnalysisData = {
+        overview: {
+          totalCost: 127.45,
+          avgCostPerCall: 0.12,
+          avgCostPerMinute: 0.045,
+          predictedMonthlyCost: 520.30,
+          costTrend: 8.2,
+          topCostAgent: {
+            id: "agent-1",
+            name: "Customer Support Agent",
+            cost: 45.20
+          }
+        },
+        agentBreakdown: [
+          {
+            agentId: "agent-1",
+            agentName: "Customer Support Agent",
+            platform: "elevenlabs",
+            totalCost: 45.20,
+            callCount: 156,
+            avgCostPerCall: 0.29,
+            costPercentage: 35.5,
+            trend: 12.3
+          },
+          {
+            agentId: "agent-2", 
+            agentName: "Sales Assistant",
+            platform: "elevenlabs",
+            totalCost: 32.15,
+            callCount: 89,
+            avgCostPerCall: 0.36,
+            costPercentage: 25.2,
+            trend: -5.8
+          }
+        ],
+        timeSeries: Array.from({ length: 30 }, (_, i) => ({
+          date: new Date(Date.now() - (29 - i) * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          cost: Math.random() * 20 + 10,
+          calls: Math.floor(Math.random() * 50 + 25),
+          avgCostPerCall: Math.random() * 0.3 + 0.1
+        })),
+        predictions: {
+          nextMonth: 520.30,
+          nextQuarter: 1580.90,
+          yearlyProjection: 6200.00,
+          recommendations: [
+            {
+              type: 'optimization',
+              message: 'Consider optimizing agent prompts to reduce average call duration and lower costs.',
+              potentialSavings: 45.20
+            },
+            {
+              type: 'alert',
+              message: 'Cost increased by 15% this week compared to last week.',
+              potentialSavings: 0
+            }
+          ]
+        }
+      };
+      
+      res.set({
+        'Cache-Control': 'private, max-age=180',
+        'Vary': 'Authorization'
+      });
+      
+      res.json(costAnalysisData);
+    } catch (error) {
+      console.error('Cost analysis error:', error);
+      res.status(500).json({ message: "Failed to fetch cost analysis data" });
+    }
+  });
+
+  // Advanced Analytics: Performance Dashboard
+  app.get("/api/analytics/performance", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const dateFrom = req.query.dateFrom ? new Date(req.query.dateFrom as string) : new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+      const dateTo = req.query.dateTo ? new Date(req.query.dateTo as string) : new Date();
+      
+      // Mock performance data - would be replaced with real implementation
+      const performanceData = {
+        overview: {
+          avgResponseTime: 1250,
+          p95ResponseTime: 2800,
+          successRate: 98.5,
+          errorRate: 1.5,
+          uptime: 99.8,
+          totalRequests: 2456,
+          slaCompliance: 97.2,
+          qualityScore: 92.3
+        },
+        latencyBreakdown: {
+          speechToText: 450,
+          agentLogic: 320,
+          ttsGeneration: 380,
+          networkLatency: 100
+        },
+        timeSeries: Array.from({ length: 168 }, (_, i) => ({
+          timestamp: new Date(Date.now() - (167 - i) * 60 * 60 * 1000).toISOString(),
+          responseTime: Math.random() * 1000 + 800,
+          p95: Math.random() * 2000 + 1500,
+          successRate: Math.random() * 5 + 95,
+          requests: Math.floor(Math.random() * 50 + 10)
+        })),
+        agentPerformance: [
+          {
+            agentId: "agent-1",
+            agentName: "Customer Support Agent",
+            platform: "elevenlabs",
+            avgResponseTime: 1180,
+            successRate: 99.2,
+            qualityScore: 94.5,
+            totalCalls: 856,
+            errorCount: 7,
+            slaCompliance: 98.8
+          }
+        ],
+        errorAnalysis: [
+          { type: "Timeout", count: 12, percentage: 0.8, trend: -15.2 },
+          { type: "API Error", count: 8, percentage: 0.5, trend: 5.3 },
+          { type: "Network Error", count: 5, percentage: 0.3, trend: -8.7 }
+        ],
+        slaMetrics: {
+          responseTimeTarget: 2000,
+          uptimeTarget: 99.5,
+          successRateTarget: 98.0,
+          currentCompliance: 97.2,
+          violations: []
+        }
+      };
+      
+      res.set({
+        'Cache-Control': 'private, max-age=180',
+        'Vary': 'Authorization'
+      });
+      
+      res.json(performanceData);
+    } catch (error) {
+      console.error('Performance analysis error:', error);
+      res.status(500).json({ message: "Failed to fetch performance data" });
+    }
+  });
+
+  // Advanced Analytics: Trend Analysis
+  app.get("/api/analytics/trends", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const dateFrom = req.query.dateFrom ? new Date(req.query.dateFrom as string) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      const dateTo = req.query.dateTo ? new Date(req.query.dateTo as string) : new Date();
+      const forecastPeriod = req.query.forecastPeriod as 'week' | 'month' | 'quarter' || 'month';
+      const granularity = req.query.granularity as 'hour' | 'day' | 'week' || 'day';
+      
+      // Mock trend analysis data with predictions - would be replaced with real ML implementation
+      const trendData = {
+        timeSeries: Array.from({ length: 30 }, (_, i) => ({
+          timestamp: new Date(Date.now() - (29 - i) * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          calls: Math.floor(Math.random() * 100 + 50 + i * 2),
+          avgDuration: Math.random() * 200 + 120,
+          cost: Math.random() * 25 + 15,
+          successRate: Math.random() * 5 + 95
+        })),
+        seasonality: {
+          hourly: Array.from({ length: 24 }, (_, hour) => ({
+            hour,
+            avgCalls: Math.floor(Math.random() * 30 + 10),
+            pattern: hour >= 9 && hour <= 17 ? 'peak' : hour >= 6 && hour <= 9 || hour >= 17 && hour <= 21 ? 'normal' : 'low'
+          })),
+          daily: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => ({
+            day,
+            avgCalls: Math.floor(Math.random() * 50 + 30),
+            pattern: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'].includes(day) ? 'peak' : 'normal'
+          })),
+          weekly: Array.from({ length: 12 }, (_, week) => ({
+            week: week + 1,
+            avgCalls: Math.floor(Math.random() * 200 + 150),
+            pattern: 'normal'
+          }))
+        },
+        predictions: {
+          nextWeek: Array.from({ length: 7 }, (_, i) => ({
+            timestamp: new Date(Date.now() + (i + 1) * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+            predictedCalls: Math.floor(Math.random() * 20 + 80),
+            predictedCost: Math.random() * 5 + 20,
+            confidence: Math.random() * 20 + 75
+          })),
+          nextMonth: Array.from({ length: 30 }, (_, i) => ({
+            timestamp: new Date(Date.now() + (i + 1) * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+            predictedCalls: Math.floor(Math.random() * 30 + 70),
+            predictedCost: Math.random() * 8 + 18,
+            confidence: Math.random() * 15 + 70
+          })),
+          insights: [
+            {
+              type: 'growth',
+              message: 'Call volume is trending upward with a 15% increase expected next month.',
+              confidence: 87.5,
+              impact: 'high',
+              recommendation: 'Consider scaling your agent capacity to handle increased demand.'
+            },
+            {
+              type: 'seasonal',
+              message: 'Peak hours consistently occur between 9 AM and 5 PM on weekdays.',
+              confidence: 94.2,
+              impact: 'medium',
+              recommendation: 'Optimize agent availability during peak business hours.'
+            }
+          ]
+        },
+        comparisons: {
+          periodOverPeriod: {
+            current: { calls: 1250, cost: 245.50, avgDuration: 135, successRate: 98.2 },
+            previous: { calls: 1120, cost: 220.30, avgDuration: 142, successRate: 97.8 },
+            changes: { calls: 11.6, cost: 11.4, avgDuration: -4.9, successRate: 0.4 }
+          },
+          benchmarks: {
+            industry: { avgCallsPerUser: 25.5, avgCostPerCall: 0.18, avgSuccessRate: 96.5 },
+            userVsIndustry: { calls: 1.85, cost: 0.67, successRate: 1.02 }
+          }
+        },
+        forecasting: {
+          model: "ARIMA + Seasonal Decomposition",
+          accuracy: 89.3,
+          confidence: 82.7,
+          scenarios: [
+            {
+              name: "Conservative Growth",
+              description: "Steady 5% monthly growth in call volume",
+              growth: 5.0,
+              projectedCalls: 1312,
+              projectedCost: 257.78
+            },
+            {
+              name: "Moderate Growth", 
+              description: "Expected 12% monthly growth based on current trends",
+              growth: 12.0,
+              projectedCalls: 1400,
+              projectedCost: 275.00
+            },
+            {
+              name: "Aggressive Growth",
+              description: "High growth scenario with 20% monthly increase",
+              growth: 20.0,
+              projectedCalls: 1500,
+              projectedCost: 294.60
+            }
+          ]
+        }
+      };
+      
+      res.set({
+        'Cache-Control': 'private, max-age=300',
+        'Vary': 'Authorization'
+      });
+      
+      res.json(trendData);
+    } catch (error) {
+      console.error('Trend analysis error:', error);
+      res.status(500).json({ message: "Failed to fetch trend analysis data" });
+    }
+  });
+
   app.get("/api/calls/:id", requireAuth, async (req: Request, res: Response) => {
     try {
       const call = await storage.getCall(req.user!.id, req.params.id);
