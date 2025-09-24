@@ -142,11 +142,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = req.user!.id;
       const cacheKey = cacheKeys.dashboardStats(userId);
       
-      // Check cache first
-      let stats = cache.get(cacheKey);
+      // Check cache first with proper validation
+      let stats = cache.get(cacheKey) as any;
       
-      if (!stats) {
-        // Cache miss - fetch from database
+      // Validate cache has proper shape
+      if (!stats || typeof stats?.totalCalls !== 'number') {
+        // Cache miss or invalid - fetch from database
         stats = await storage.getDashboardStats(userId);
         // Store in cache for 5 minutes
         cache.set(cacheKey, stats, cacheTTL.dashboardStats);
@@ -161,6 +162,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.json(stats);
     } catch (error) {
+      console.error(`[ERROR] Dashboard stats error for user ${req.user!.id}:`, error);
       res.status(500).json({ message: "Failed to fetch dashboard stats" });
     }
   });
