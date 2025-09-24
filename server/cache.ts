@@ -1,5 +1,6 @@
 // Enhanced cache with Redis support fallback to in-memory
 import { createClient } from 'redis';
+import { createHash } from 'crypto';
 
 interface CacheEntry<T> {
   data: T;
@@ -259,20 +260,165 @@ export const cache = new Cache();
 
 // Cache key generators
 export const cacheKeys = {
+  // Core dashboard and user data
   dashboardStats: (userId: string) => `dashboard:stats:${userId}`,
+  userAgents: (userId: string) => `user:agents:${userId}`,
+  userCalls: (userId: string) => `user:calls:${userId}`,
+  
+  // Analytics and metrics
   analytics: (userId: string, agentId?: string, days?: number) => 
     `analytics:${userId}:${agentId || 'all'}:${days || 30}`,
-  callSearch: (userId: string, query: string, page: number) => 
-    `calls:search:${userId}:${query}:${page}`,
-  userAgents: (userId: string) => `user:agents:${userId}`,
-  performance: (agentId: string) => `performance:${agentId}`
+  performanceMetrics: (userId: string, period: string) => `metrics:${userId}:${period}`,
+  costAnalysis: (userId: string, agentId?: string) => 
+    agentId ? `costs:${userId}:agent:${agentId}` : `costs:${userId}:total`,
+  trendData: (userId: string, metric: string, period: string) => 
+    `trends:${userId}:${metric}:${period}`,
+  
+  // Search and pagination
+  callSearch: (userId: string, query: string, page: number) => {
+    // Create collision-resistant hash of the full query parameters
+    const hash = createHash('sha256').update(query).digest('hex').slice(0, 16);
+    return `calls:search:${userId}:${hash}:${page}`;
+  },
+  paginatedCalls: (userId: string, page: number, limit: number) => 
+    `calls:${userId}:page:${page}:limit:${limit}`,
+  paginatedAgents: (userId: string, page: number, limit: number) => 
+    `agents:${userId}:page:${page}:limit:${limit}`,
+  
+  // Real-time monitoring
+  activeRooms: () => 'rooms:active',
+  roomMetrics: (roomId: string) => `room:${roomId}:metrics`,
+  liveCallStats: () => 'stats:live:calls',
+  
+  // Individual entities
+  agent: (agentId: string) => `agent:${agentId}`,
+  call: (callId: string) => `call:${callId}`,
+  performance: (agentId: string) => `performance:${agentId}`,
+  
+  // Call management features
+  callTranscript: (callId: string) => `call:${callId}:transcript`,
+  callRating: (callId: string) => `call:${callId}:rating`,
+  callCategories: (userId: string) => `user:${userId}:categories`,
+  
+  // Global caches
+  allAgents: () => 'agents:all',
+  allCalls: () => 'calls:all'
 };
 
 // Cache TTL settings (in seconds)
 export const cacheTTL = {
+  // Real-time data (short TTL)
   dashboardStats: 300, // 5 minutes
-  analytics: 900, // 15 minutes
-  callSearch: 60, // 1 minute
+  liveCallStats: 60, // 1 minute
+  activeRooms: 30, // 30 seconds for real-time monitoring
+  roomMetrics: 120, // 2 minutes
+  
+  // User data (medium TTL)
   userAgents: 600, // 10 minutes
-  performance: 180 // 3 minutes
+  userCalls: 300, // 5 minutes
+  callSearch: 60, // 1 minute for search results
+  paginatedCalls: 300, // 5 minutes
+  paginatedAgents: 600, // 10 minutes
+  
+  // Analytics and metrics (longer TTL since less frequent changes)
+  analytics: 900, // 15 minutes
+  performanceMetrics: 600, // 10 minutes
+  costAnalysis: 3600, // 1 hour (cost data changes less frequently)
+  trendData: 1800, // 30 minutes
+  performance: 180, // 3 minutes
+  
+  // Individual entities (medium-long TTL)
+  agent: 1800, // 30 minutes
+  call: 3600, // 1 hour (call data rarely changes after creation)
+  
+  // Call management features
+  callTranscript: 86400, // 24 hours (transcripts don't change)
+  callRating: 43200, // 12 hours (ratings change infrequently)
+  callCategories: 21600, // 6 hours (categories change infrequently)
+  
+  // Global data (longer TTL)
+  allAgents: 7200, // 2 hours
+  allCalls: 3600 // 1 hour
+};
+
+// Cache invalidation patterns for bulk clearing
+export const cacheInvalidation = {
+  // User-specific patterns
+  userPattern: (userId: string) => `*${userId}*`,
+  userDashboard: (userId: string) => `dashboard:*${userId}*`,
+  userAgents: (userId: string) => `*agents*${userId}*`,
+  userCalls: (userId: string) => `*calls*${userId}*`,
+  
+  // Entity-specific patterns
+  agentPattern: (agentId: string) => `*agent*${agentId}*`,
+  callPattern: (callId: string) => `*call*${callId}*`,
+  roomPattern: (roomId: string) => `*room*${roomId}*`,
+  
+  // Category patterns
+  allAnalytics: () => 'analytics:*',
+  allMetrics: () => 'metrics:*',
+  allCosts: () => 'costs:*',
+  allTrends: () => 'trends:*',
+  allSearch: () => '*search*',
+  
+  // Real-time patterns
+  liveStats: () => '*live*',
+  activeRooms: () => 'rooms:*'
+};
+
+// Helper functions for cache management
+export const cacheHelpers = {
+  // Invalidate all user-related cache entries
+  async invalidateUserCache(userId: string): Promise<void> {
+    await cache.invalidatePattern(cacheInvalidation.userPattern(userId));
+  },
+  
+  // Invalidate agent-related cache entries
+  async invalidateAgentCache(agentId: string, userId?: string): Promise<void> {
+    await cache.invalidatePattern(cacheInvalidation.agentPattern(agentId));
+    if (userId) {
+      await cache.invalidatePattern(cacheInvalidation.userAgents(userId));
+      await cache.invalidatePattern(cacheInvalidation.userDashboard(userId));
+    }
+  },
+  
+  // Invalidate call-related cache entries
+  async invalidateCallCache(callId: string, userId?: string): Promise<void> {
+    await cache.invalidatePattern(cacheInvalidation.callPattern(callId));
+    if (userId) {
+      await cache.invalidatePattern(cacheInvalidation.userCalls(userId));
+      await cache.invalidatePattern(cacheInvalidation.userDashboard(userId));
+    }
+  },
+  
+  // Invalidate analytics cache
+  async invalidateAnalyticsCache(userId: string): Promise<void> {
+    await cache.invalidatePattern(cacheInvalidation.allAnalytics());
+    await cache.invalidatePattern(cacheInvalidation.allMetrics());
+    await cache.invalidatePattern(cacheInvalidation.allCosts());
+    await cache.invalidatePattern(cacheInvalidation.allTrends());
+    await cache.invalidatePattern(cacheInvalidation.userDashboard(userId));
+  },
+  
+  // Warm up cache for a user (preload frequently accessed data)
+  async warmUserCache(userId: string): Promise<void> {
+    // This would be called when a user logs in to preload their data
+    // Implementation would depend on the storage layer calling cache.set()
+    console.log(`Cache warming initiated for user: ${userId}`);
+  },
+  
+  // Get cache health and statistics
+  async getCacheHealth(): Promise<{
+    healthy: boolean;
+    backend: string;
+    stats: any;
+  }> {
+    const healthy = await cache.isHealthy();
+    const stats = await cache.getStats();
+    return {
+      healthy,
+      backend: stats.backend,
+      stats
+    };
+  }
 };

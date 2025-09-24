@@ -15,7 +15,7 @@ import { db } from "./db";
 import { eq, and, or, sql, desc, asc, between, like, inArray, gte, lte, not, isNull, isNotNull } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import bcrypt from "bcrypt";
-import { cache, cacheKeys, cacheTTL } from "./cache";
+import { cache, cacheKeys, cacheTTL, cacheHelpers } from "./cache";
 
 export interface IStorage {
   // Users
@@ -541,11 +541,31 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getUserAgents(userId: string): Promise<Agent[]> {
+    // Check cache first
+    const cacheKey = cacheKeys.userAgents(userId);
+    try {
+      const cached = await cache.get<Agent[]>(cacheKey);
+      if (cached) {
+        return cached;
+      }
+    } catch (error) {
+      console.error('Cache get error for user agents:', error);
+    }
+
     const agentIds = await this.getAssignedAgentIds(userId);
     if (agentIds.length === 0) return [];
     
-    return await db.select().from(agents)
+    const userAgentsData = await db.select().from(agents)
       .where(inArray(agents.id, agentIds));
+    
+    // Cache the results
+    try {
+      await cache.set(cacheKey, userAgentsData, cacheTTL.userAgents);
+    } catch (error) {
+      console.error('Cache set error for user agents:', error);
+    }
+    
+    return userAgentsData;
   }
 
   async getAllUserAgentAssignments(): Promise<Map<string, { count: number; agents: Agent[] }>> {
@@ -595,9 +615,14 @@ export class DatabaseStorage implements IStorage {
   async createAgent(agent: InsertAgent): Promise<Agent> {
     const [created] = await db.insert(agents).values(agent).returning();
     
-    // Invalidate related caches
-    await cache.invalidatePattern("user:agents:*");
-    await cache.invalidatePattern("dashboard:stats:*");
+    // Invalidate related caches using enhanced cache helpers
+    await cacheHelpers.invalidateAgentCache(created.id);
+    
+    // If agent is assigned to users, invalidate their caches too
+    const assignments = await db.select().from(userAgents).where(eq(userAgents.agentId, created.id));
+    for (const assignment of assignments) {
+      await cacheHelpers.invalidateUserCache(assignment.userId);
+    }
     
     return created;
   }
@@ -667,9 +692,16 @@ export class DatabaseStorage implements IStorage {
   async createCall(call: InsertCall): Promise<Call> {
     const [created] = await db.insert(calls).values(call).returning();
     
-    // Invalidate related caches
-    await cache.invalidatePattern("dashboard:stats:*");
-    await cache.invalidatePattern("calls:search:*");
+    // Invalidate related caches using enhanced cache helpers
+    await cacheHelpers.invalidateCallCache(created.id);
+    
+    // If call is associated with an agent, find users with access to that agent
+    if (created.agentId) {
+      const assignments = await db.select().from(userAgents).where(eq(userAgents.agentId, created.agentId));
+      for (const assignment of assignments) {
+        await cacheHelpers.invalidateUserCache(assignment.userId);
+      }
+    }
     
     return created;
   }
@@ -879,6 +911,27 @@ export class DatabaseStorage implements IStorage {
     pageSize: number;
     pages: number;
   }> {
+    // Create cache key based on search parameters (hash full params to avoid collisions)
+    const sortedParams = Object.keys(params).sort().reduce((obj, key) => {
+      obj[key] = params[key as keyof typeof params];
+      return obj;
+    }, {} as any);
+    const cacheKey = cacheKeys.callSearch(userId, JSON.stringify(sortedParams), params.page || 1);
+    try {
+      const cached = await cache.get<{
+        calls: Call[];
+        total: number;
+        page: number;
+        pageSize: number;
+        pages: number;
+      }>(cacheKey);
+      if (cached) {
+        return cached;
+      }
+    } catch (error) {
+      console.error('Cache get error for call search:', error);
+    }
+
     const assignedAgentIds = await this.getAssignedAgentIds(userId);
     if (assignedAgentIds.length === 0) {
       return { calls: [], total: 0, page: 1, pageSize: 10, pages: 0 };
@@ -963,13 +1016,22 @@ export class DatabaseStorage implements IStorage {
 
     const pages = Math.ceil(Number(count) / limit);
 
-    return {
+    const result = {
       calls: filteredResults,
       total: Number(count),
       page,
       pageSize: limit,
       pages
     };
+
+    // Cache the search results
+    try {
+      await cache.set(cacheKey, result, cacheTTL.callSearch);
+    } catch (error) {
+      console.error('Cache set error for call search:', error);
+    }
+
+    return result;
   }
 
   // Search suggestions
