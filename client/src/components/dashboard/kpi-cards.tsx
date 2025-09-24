@@ -11,7 +11,7 @@ export default function KpiCards({ stats }: KpiCardsProps) {
   const baseKpis = [
     {
       title: "Total Calls Handled",
-      value: stats.totalCalls.toLocaleString(),
+      value: (stats.totalCalls || 0).toLocaleString(),
       icon: TrendingUp,
       trend: "+5.2%",
       trendColor: "text-emerald-600",
@@ -19,7 +19,7 @@ export default function KpiCards({ stats }: KpiCardsProps) {
     },
     {
       title: "Avg. Handle Time",
-      value: stats.avgHandleTime,
+      value: stats.avgHandleTime || "0m 0s",
       icon: Clock,
       trend: "-2.1%",
       trendColor: "text-emerald-600",
@@ -33,7 +33,7 @@ export default function KpiCards({ stats }: KpiCardsProps) {
   if (stats.platforms?.includes('elevenlabs')) {
     platformKpis.push({
       title: "ElevenLabs Latency (P95)",
-      value: `${stats.elevenLabsLatencyP95}ms`,
+      value: `${stats.elevenLabsLatencyP95 || 0}ms`,
       icon: Zap,
       trend: "Optimal",
       trendColor: "text-amber-600",
