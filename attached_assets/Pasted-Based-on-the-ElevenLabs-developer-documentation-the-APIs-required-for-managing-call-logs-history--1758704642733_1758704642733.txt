@@ -1,0 +1,70 @@
+Based on the ElevenLabs developer documentation, the APIs required for managing call logs, history, summaries, recordings, and transcripts are primarily found within the **Agents Platform** (Conversational AI) suite.
+
+Here is a detailed breakdown of the correct APIs for the functionalities you requested:
+
+### 1. Call Log and Call History
+
+The **Conversations API** serves as the central resource for accessing the history of interactions handled by your AI agents.
+
+*   **List Conversations (Call History/Log):**
+    *   **Endpoint:** `GET /v1/convai/conversations`
+    *   **Description:** Retrieves a paginated list of all conversations.
+    *   **Key Parameters:**
+        *   `agent_id`: Filter by a specific agent.
+        *   `call_start_before_unix` / `call_start_after_unix`: Filter by time range.
+        *   `call_successful`: Filter by the outcome (success, failure, unknown).
+    *   **Response Metadata:** Includes `conversation_id`, `start_time_unix_secs`, `call_duration_secs`, `status`, and `direction`.
+
+### 2. Call Summary
+
+Call summaries can be retrieved directly when listing the conversation history.
+
+*   **List Conversations with Summaries:**
+    *   **Endpoint:** `GET /v1/convai/conversations`
+    *   **Description:** To include summaries in the response, you must use the `summary_mode` parameter.
+    *   **Key Parameter:**
+        *   `summary_mode`: Set this to `include`.
+    *   **Response:** When included, the response adds `transcript_summary` and `call_summary_title` for each conversation.
+
+### 3. Call Transcripts
+
+To access the full, detailed transcript of a specific interaction, you use the conversation details endpoint.
+
+*   **Get Conversation Details:**
+    *   **Endpoint:** `GET /v1/convai/conversations/{conversation_id}`
+    *   **Description:** Retrieves the complete details of a specific conversation.
+    *   **Response:** Includes a `transcript` array. Each object in the array details the `role` (user or agent), `time_in_call_secs`, and the `message` (the transcribed text).
+
+### 4. Call Recordings
+
+You can retrieve the audio file for any conversation managed by the Agents Platform.
+
+*   **Get Conversation Audio:**
+    *   **Endpoint:** `GET /v1/convai/conversations/{conversation_id}/audio`
+    *   **Description:** Retrieves the full audio recording of the specified conversation.
+    *   **Response:** The audio file of the conversation.
+
+### 5. Dashboard Analytics Connection
+
+ElevenLabs does not provide a single API endpoint that returns pre-aggregated dashboard statistics (e.g., total calls over a month, average duration graphs). Instead, you connect your analytics systems using the raw data from the APIs above and by leveraging **Webhooks** and **Agent Analysis**.
+
+#### Agent Analysis (Data Extraction and Evaluation)
+
+The platform includes "Agent Analysis" capabilities, which you configure within the platform to:
+
+1.  **Success Evaluation:** Define metrics to assess conversation quality and goal achievement.
+2.  **Data Collection:** Extract structured data points (e.g., customer intent, contact details) from the conversation transcript.
+
+The results of this analysis are available in the response of `GET /v1/convai/conversations/{conversation_id}` under the `analysis` object.
+
+#### Post-call Webhooks
+
+This is the recommended method for feeding real-time analytics into your external systems. ElevenLabs sends a POST request to your specified endpoint after a call concludes and analysis is complete.
+
+*   **Types:**
+    *   `post_call_transcription`: Contains the full conversation data, including transcripts, analysis results (Success Evaluation and Data Collection), and metadata.
+    *   `post_call_audio`: Contains the audio of the conversation.
+
+#### Raw Data Aggregation
+
+You can periodically pull data using `GET /v1/convai/conversations` and aggregate metrics such as `call_duration_secs` and total call counts yourself to build custom analytics dashboards.

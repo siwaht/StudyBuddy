@@ -617,7 +617,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Advanced Search API
+  // Advanced Search API - Enhanced with ElevenLabs conversations
   app.get("/api/calls/search", requireAuth, async (req: Request, res: Response) => {
     try {
       const params = {
@@ -635,21 +635,139 @@ export async function registerRoutes(app: Express): Promise<Server> {
         limit: req.query.limit ? parseInt(req.query.limit as string) : 10,
       };
       
-      const result = await storage.searchCalls(req.user!.id, params);
+      // Fetch local database calls
+      const localResult = await storage.searchCalls(req.user!.id, params);
+      
+      // Fetch ElevenLabs conversations with proper filtering
+      let elevenLabsCalls: any[] = [];
+      if (elevenlabsService.isConfigured()) {
+        try {
+          const apiKey = await elevenlabsService.getApiKey();
+          if (apiKey) {
+            // Fetch more data to ensure sufficient results after filtering
+            let url = `https://api.elevenlabs.io/v1/convai/conversations?page_size=100&page=1`;
+            if (params.agentId) {
+              url += `&agent_id=${params.agentId}`;
+            }
+            
+            const response = await fetch(url, {
+              headers: { 'xi-api-key': apiKey },
+            });
+            
+            if (response.ok) {
+              const data = await response.json();
+              elevenLabsCalls = data.conversations?.map((conv: any) => ({
+                id: `EL-${conv.conversation_id}`,
+                conversationId: conv.conversation_id,
+                agentId: conv.agent_id,
+                startTime: new Date(conv.start_time * 1000).toISOString(),
+                endTime: conv.end_time ? new Date(conv.end_time * 1000).toISOString() : null,
+                duration: conv.end_time && conv.start_time ? conv.end_time - conv.start_time : 0,
+                status: conv.status,
+                hasAudio: conv.has_audio,
+                platform: 'elevenlabs',
+                sentiment: 'neutral',
+                metadata: {
+                  phase: conv.phase,
+                  method: conv.method,
+                  conversationMode: conv.conversation_mode,
+                }
+              })) || [];
+              
+              // Apply filters to ElevenLabs calls
+              if (params.q) {
+                const query = params.q.toLowerCase();
+                elevenLabsCalls = elevenLabsCalls.filter(call => 
+                  call.id.toLowerCase().includes(query) ||
+                  call.agentId?.toLowerCase().includes(query) ||
+                  call.status?.toLowerCase().includes(query)
+                );
+              }
+              
+              if (params.dateFrom) {
+                elevenLabsCalls = elevenLabsCalls.filter(call => 
+                  new Date(call.startTime) >= params.dateFrom!
+                );
+              }
+              
+              if (params.dateTo) {
+                elevenLabsCalls = elevenLabsCalls.filter(call => 
+                  new Date(call.startTime) <= params.dateTo!
+                );
+              }
+              
+              if (params.durationMin !== undefined) {
+                elevenLabsCalls = elevenLabsCalls.filter(call => call.duration >= params.durationMin!);
+              }
+              
+              if (params.durationMax !== undefined) {
+                elevenLabsCalls = elevenLabsCalls.filter(call => call.duration <= params.durationMax!);
+              }
+              
+              if (params.hasRecording !== undefined) {
+                elevenLabsCalls = elevenLabsCalls.filter(call => call.hasAudio === params.hasRecording);
+              }
+              
+              if (params.sentiment && params.sentiment.length > 0) {
+                elevenLabsCalls = elevenLabsCalls.filter(call => 
+                  params.sentiment!.includes(call.sentiment)
+                );
+              }
+            }
+          }
+        } catch (error) {
+          console.error('Error fetching ElevenLabs conversations:', error);
+        }
+      }
       
       // Get agents to include in response
       const agents = await storage.getAllAgents(req.user!.id);
       const agentsMap = new Map(agents.map(agent => [agent.id, agent]));
       
-      // Add agent details to each call
-      const callsWithAgents = result.calls.map(call => ({
+      // Add agent details to local calls
+      const localCallsWithAgents = localResult.calls.map(call => ({
+        ...call,
+        agent: agentsMap.get(call.agentId),
+        platform: 'local'
+      }));
+      
+      // Add agent details to ElevenLabs calls
+      const elevenLabsCallsWithAgents = elevenLabsCalls.map(call => ({
         ...call,
         agent: agentsMap.get(call.agentId),
       }));
       
+      // Combine and sort results chronologically
+      const allCalls = [...localCallsWithAgents, ...elevenLabsCallsWithAgents];
+      
+      // Sort by startTime descending (most recent first) by default
+      allCalls.sort((a, b) => {
+        const dateA = new Date(a.startTime).getTime();
+        const dateB = new Date(b.startTime).getTime();
+        
+        if (params.sortBy === 'date') {
+          return params.sortOrder === 'asc' ? dateA - dateB : dateB - dateA;
+        } else if (params.sortBy === 'duration') {
+          const durationA = a.duration || 0;
+          const durationB = b.duration || 0;
+          return params.sortOrder === 'asc' ? durationA - durationB : durationB - durationA;
+        } else {
+          // Default: newest first
+          return dateB - dateA;
+        }
+      });
+      
+      // Apply pagination to combined and sorted results
+      const startIndex = (params.page - 1) * params.limit;
+      const endIndex = startIndex + params.limit;
+      const paginatedCalls = allCalls.slice(startIndex, endIndex);
+      
       res.json({
-        ...result,
-        calls: callsWithAgents
+        calls: paginatedCalls,
+        total: allCalls.length,
+        page: params.page,
+        pageSize: params.limit,
+        pages: Math.ceil(allCalls.length / params.limit)
       });
     } catch (error) {
       console.error('Search error:', error);
