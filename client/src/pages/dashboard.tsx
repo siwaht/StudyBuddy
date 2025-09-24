@@ -43,7 +43,7 @@ export default function Dashboard() {
     queryKey: ["/api/dashboard/stats"],
   });
 
-  const { data: calls, isLoading: callsLoading } = useQuery<CallWithAgent[]>({
+  const { data: callsResponse, isLoading: callsLoading } = useQuery<{ data: CallWithAgent[]; pagination: any }>({
     queryKey: ["/api/calls"],
   });
 
@@ -310,7 +310,7 @@ export default function Dashboard() {
       <Charts stats={stats} />
       
       {/* Call History Table */}
-      <CallHistoryTable calls={calls || []} />
+      <CallHistoryTable calls={callsResponse?.data || []} />
     </div>
   );
 }
