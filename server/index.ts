@@ -170,4 +170,43 @@ app.use((req, res, next) => {
   }, () => {
     log(`serving on port ${port}`);
   });
+
+  // Graceful shutdown handlers for deployment
+  const gracefulShutdown = (signal: string) => {
+    log(`Received ${signal}, starting graceful shutdown...`);
+    
+    // Stop accepting new connections
+    server.close(() => {
+      log('HTTP server closed');
+      
+      // Close database connections
+      pool.end(() => {
+        log('Database connections closed');
+        process.exit(0);
+      });
+    });
+
+    // Force shutdown after 30 seconds
+    setTimeout(() => {
+      console.error('Forcefully shutting down after timeout');
+      process.exit(1);
+    }, 30000);
+  };
+
+  // Handle deployment signals
+  process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+  process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
+  // Handle unhandled promise rejections to prevent crashes
+  process.on('unhandledRejection', (reason, promise) => {
+    console.error('Unhandled Promise Rejection at:', promise, 'reason:', reason);
+    // Log but don't exit - let the server continue running
+  });
+
+  // Handle uncaught exceptions
+  process.on('uncaughtException', (error) => {
+    console.error('Uncaught Exception:', error);
+    // For uncaught exceptions, we should restart cleanly
+    gracefulShutdown('uncaughtException');
+  });
 })();
