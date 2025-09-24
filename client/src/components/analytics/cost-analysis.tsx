@@ -14,6 +14,8 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   BarChart, Bar, PieChart, Pie, Cell, Legend, Area, AreaChart
 } from "recharts";
+import { ResponsiveChart, MobileTooltip } from '@/components/ui/responsive-chart';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 interface CostAnalysisData {
   overview: {
@@ -63,6 +65,7 @@ interface CostAnalysisProps {
 const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#F97316'];
 
 export default function CostAnalysis({ dateRange }: CostAnalysisProps) {
+  const isMobile = useIsMobile();
   const [timeGrouping, setTimeGrouping] = useState<'day' | 'week' | 'month'>('day');
   
   const { data: costData, isLoading } = useQuery<CostAnalysisData>({
