@@ -29,6 +29,7 @@ interface SearchParams {
   durationMin?: number;
   durationMax?: number;
   hasRecording?: boolean;
+  callSuccessful?: 'success' | 'failure' | 'unknown';
   sortBy?: 'date' | 'duration' | 'sentiment';
   sortOrder?: 'asc' | 'desc';
   page?: number;
@@ -101,6 +102,7 @@ export default function Calls() {
   if (filters.durationMin !== undefined) searchParams.append('durationMin', filters.durationMin.toString());
   if (filters.durationMax !== undefined) searchParams.append('durationMax', filters.durationMax.toString());
   if (filters.hasRecording !== undefined) searchParams.append('hasRecording', filters.hasRecording.toString());
+  if (filters.callSuccessful) searchParams.append('callSuccessful', filters.callSuccessful);
   if (filters.sortBy) searchParams.append('sortBy', filters.sortBy);
   if (filters.sortOrder) searchParams.append('sortOrder', filters.sortOrder);
   searchParams.append('page', (filters.page || 1).toString());
@@ -195,7 +197,8 @@ export default function Calls() {
     filters.dateTo,
     filters.durationMin !== undefined,
     filters.durationMax !== undefined,
-    filters.hasRecording !== undefined
+    filters.hasRecording !== undefined,
+    filters.callSuccessful
   ].filter(Boolean).length;
 
   if (isLoading && !searchResult) {
@@ -329,6 +332,29 @@ export default function Calls() {
                     </div>
                   ))}
                 </div>
+              </div>
+
+              {/* Call Success Status Filter */}
+              <div className="space-y-2">
+                <Label>Call Success Status</Label>
+                <Select 
+                  value={filters.callSuccessful || ""} 
+                  onValueChange={(value) => setFilters(prev => ({ 
+                    ...prev, 
+                    callSuccessful: value ? value as 'success' | 'failure' | 'unknown' : undefined, 
+                    page: 1 
+                  }))}
+                >
+                  <SelectTrigger data-testid="call-success-filter">
+                    <SelectValue placeholder="All statuses" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">All statuses</SelectItem>
+                    <SelectItem value="success">Success</SelectItem>
+                    <SelectItem value="failure">Failure</SelectItem>
+                    <SelectItem value="unknown">Unknown</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
 
               {/* Date Range */}
@@ -474,6 +500,16 @@ export default function Calls() {
                     <p>Agent: {call.agent?.name || 'Unknown'} ({call.agent?.platform || 'N/A'})</p>
                     <p>Started: {new Date(call.startTime).toLocaleString()}</p>
                     {call.outcome && <p>Outcome: {call.outcome}</p>}
+                    {(call as any).callSummaryTitle && (
+                      <p className="font-medium text-foreground">
+                        📋 {(call as any).callSummaryTitle}
+                      </p>
+                    )}
+                    {(call as any).transcriptSummary && (
+                      <p className="text-sm bg-muted/50 p-2 rounded text-foreground">
+                        💬 {(call as any).transcriptSummary}
+                      </p>
+                    )}
                   </div>
                 </div>
                 <Link href={`/calls/${call.id}`}>

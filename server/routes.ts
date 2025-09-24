@@ -629,6 +629,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         durationMin: req.query.durationMin ? parseInt(req.query.durationMin as string) : undefined,
         durationMax: req.query.durationMax ? parseInt(req.query.durationMax as string) : undefined,
         hasRecording: req.query.hasRecording ? req.query.hasRecording === 'true' : undefined,
+        callSuccessful: req.query.callSuccessful as 'success' | 'failure' | 'unknown' | undefined,
         sortBy: req.query.sortBy as 'date' | 'duration' | 'sentiment' | undefined,
         sortOrder: req.query.sortOrder as 'asc' | 'desc' | undefined,
         page: req.query.page ? parseInt(req.query.page as string) : 1,
@@ -644,11 +645,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
         try {
           const apiKey = await elevenlabsService.getApiKey();
           if (apiKey) {
-            // Fetch more data to ensure sufficient results after filtering
-            let url = `https://api.elevenlabs.io/v1/convai/conversations?page_size=100&page=1`;
+            // Build URL with enhanced parameters including summary mode and server-side filtering
+            const urlParams = new URLSearchParams();
+            urlParams.append('page_size', '100');
+            urlParams.append('page', '1');
+            urlParams.append('summary_mode', 'include'); // Get automatic summaries
+            
             if (params.agentId) {
-              url += `&agent_id=${params.agentId}`;
+              urlParams.append('agent_id', params.agentId);
             }
+            
+            // Use server-side date filtering for better performance
+            if (params.dateFrom) {
+              urlParams.append('call_start_after_unix', Math.floor(params.dateFrom.getTime() / 1000).toString());
+            }
+            if (params.dateTo) {
+              urlParams.append('call_start_before_unix', Math.floor(params.dateTo.getTime() / 1000).toString());
+            }
+            
+            // Add call success status filtering
+            if (params.callSuccessful) {
+              urlParams.append('call_successful', params.callSuccessful);
+            }
+            
+            let url = `https://api.elevenlabs.io/v1/convai/conversations?${urlParams.toString()}`;
             
             const response = await fetch(url, {
               headers: { 'xi-api-key': apiKey },
@@ -665,8 +685,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 duration: conv.end_time && conv.start_time ? conv.end_time - conv.start_time : 0,
                 status: conv.status,
                 hasAudio: conv.has_audio,
+                hasUserAudio: conv.has_user_audio, // Enhanced audio availability
+                hasResponseAudio: conv.has_response_audio, // Enhanced audio availability
                 platform: 'elevenlabs',
                 sentiment: 'neutral',
+                // Include summary data from ElevenLabs API
+                transcriptSummary: conv.transcript_summary || null,
+                callSummaryTitle: conv.call_summary_title || null,
                 metadata: {
                   phase: conv.phase,
                   method: conv.method,
@@ -674,25 +699,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 }
               })) || [];
               
-              // Apply filters to ElevenLabs calls
+              // Apply client-side filters (date filtering now handled server-side)
               if (params.q) {
                 const query = params.q.toLowerCase();
                 elevenLabsCalls = elevenLabsCalls.filter(call => 
                   call.id.toLowerCase().includes(query) ||
                   call.agentId?.toLowerCase().includes(query) ||
-                  call.status?.toLowerCase().includes(query)
-                );
-              }
-              
-              if (params.dateFrom) {
-                elevenLabsCalls = elevenLabsCalls.filter(call => 
-                  new Date(call.startTime) >= params.dateFrom!
-                );
-              }
-              
-              if (params.dateTo) {
-                elevenLabsCalls = elevenLabsCalls.filter(call => 
-                  new Date(call.startTime) <= params.dateTo!
+                  call.status?.toLowerCase().includes(query) ||
+                  (call.transcriptSummary && call.transcriptSummary.toLowerCase().includes(query)) ||
+                  (call.callSummaryTitle && call.callSummaryTitle.toLowerCase().includes(query))
                 );
               }
               
