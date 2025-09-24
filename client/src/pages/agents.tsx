@@ -339,9 +339,13 @@ export default function Agents() {
               <CardContent>
                 <div className="space-y-3">
                   <div className="text-sm space-y-1">
-                    <p><span className="font-medium">Platform:</span> {formatPlatformName(agent.platform)}</p>
+                    <p className="mb-1">
+                      <span className="font-medium">Platform:</span> {formatPlatformName(agent.platform)}
+                    </p>
                     {agent.externalId && (
-                      <p className="font-mono text-xs text-muted-foreground">ID: {agent.externalId}</p>
+                      <p className="font-mono text-xs text-muted-foreground mb-1">
+                        ID: {agent.externalId}
+                      </p>
                     )}
                     {agent.metadata?.voice?.name && (
                       <p><span className="font-medium">Voice:</span> {agent.metadata.voice.name}</p>
