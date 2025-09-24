@@ -1,4 +1,4 @@
-import rateLimit from "express-rate-limit";
+import rateLimit, { Options } from "express-rate-limit";
 import { Request } from "express";
 
 // Store for tracking per-user rates
@@ -36,14 +36,8 @@ export const userRateLimiter = rateLimit({
     // Regular users
     return 50; // 50 requests per minute for regular users
   },
-  keyGenerator: (req) => {
-    // For authenticated users, use user ID
-    if (req.user?.id) {
-      return `user_${req.user.id}`;
-    }
-    // For non-authenticated, use the default IP handling
-    return req.ip || 'unknown';
-  },
+  // Remove custom keyGenerator to use the default which properly handles IPv6
+  // The default uses req.ip which is already properly normalized by Express
   skipFailedRequests: false,
   skipSuccessfulRequests: false,
   handler: (req, res) => {
