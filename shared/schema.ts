@@ -46,6 +46,9 @@ export const calls = pgTable("calls", {
   transcript: jsonb("transcript"), // array of transcript entries
   analysis: jsonb("analysis"), // AI analysis data
   metadata: jsonb("metadata"), // platform-specific metadata
+  rating: integer("rating"), // 1-5 star rating for call quality
+  categories: jsonb("categories").default('[]'), // array of category strings
+  tags: jsonb("tags").default('[]'), // array of tag strings for flexible labeling
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
 }, (table) => {
   return {
@@ -55,6 +58,7 @@ export const calls = pgTable("calls", {
     startTimeIdx: index("calls_start_time_idx").on(table.startTime),
     createdAtIdx: index("calls_created_at_idx").on(table.createdAt),
     sentimentIdx: index("calls_sentiment_idx").on(table.sentiment),
+    ratingIdx: index("calls_rating_idx").on(table.rating),
     
     // Composite indexes for specific query patterns used in the app
     conversationAgentIdx: index("idx_calls_conversation_agent").on(table.conversationId, table.agentId),
