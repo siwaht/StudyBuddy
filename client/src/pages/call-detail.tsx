@@ -6,7 +6,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import AudioPlayer from "@/components/call-detail/audio-player";
 import Transcript from "@/components/call-detail/transcript";
 import Analysis from "@/components/call-detail/analysis";
-import CallRating from "@/components/call-management/call-rating";
 import CallCategorization from "@/components/call-management/call-categorization";
 import type { CallWithAgent } from "@/lib/types";
 import { useState } from "react";
@@ -86,11 +85,7 @@ export default function CallDetail() {
       />
 
       {/* Call Management */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <CallRating 
-          callId={call.id} 
-          currentRating={call.rating || 0}
-        />
+      <div className="max-w-2xl">
         <CallCategorization 
           callId={call.id}
           currentCategories={call.categories || []}
