@@ -24,6 +24,22 @@ interface SearchResult {
   timestamp?: string;
 }
 
+interface ElevenLabsSubscription {
+  characterCount: number;
+  characterLimit: number;
+  characterLimitOverride: number;
+  effectiveLimit: number;
+  charactersUsedPercentage: number;
+  charactersRemaining: number;
+  voiceSlotsUsed: number;
+  voiceSlotsMax: number;
+  professionalVoiceSlotsUsed: number;
+  subscriptionTier: string;
+  canExtendCharacterLimit: boolean;
+  nextCharacterCountResetUnix: number | null;
+  subscriptionStatus: string;
+}
+
 export default function Dashboard() {
   const [, setLocation] = useLocation();
   const [quickSearchOpen, setQuickSearchOpen] = useState(false);
@@ -45,6 +61,11 @@ export default function Dashboard() {
 
   const { data: callsResponse, isLoading: callsLoading } = useQuery<{ data: CallWithAgent[]; pagination: any }>({
     queryKey: ["/api/calls"],
+  });
+
+  // Fetch ElevenLabs subscription data for credit usage
+  const { data: subscriptionData, isLoading: subscriptionLoading } = useQuery<ElevenLabsSubscription>({
+    queryKey: ["/api/elevenlabs/subscription"],
   });
 
   // Quick search query
@@ -114,7 +135,7 @@ export default function Dashboard() {
     setLocation(`/calls?q=${encodeURIComponent(preset.query)}`);
   };
 
-  if (statsLoading || callsLoading) {
+  if (statsLoading || callsLoading || subscriptionLoading) {
     return (
       <div className="p-6 space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -231,10 +252,12 @@ export default function Dashboard() {
               </div>
               <div className="group/stat hover:scale-105 transition-all duration-300">
                 <div className="flex items-center justify-center gap-2">
-                  <MessageSquare className="h-4 w-4 text-green-600" />
-                  <span className="text-2xl font-bold gradient-text">{stats.activeRooms || 0}</span>
+                  <TrendingUp className="h-4 w-4 text-green-600" />
+                  <span className="text-2xl font-bold gradient-text">
+                    {subscriptionData ? `${subscriptionData.charactersUsedPercentage}%` : '0%'}
+                  </span>
                 </div>
-                <p className="text-xs text-muted-foreground">Active Rooms</p>
+                <p className="text-xs text-muted-foreground">Credits Used</p>
               </div>
               <div className="group/stat hover:scale-105 transition-all duration-300">
                 <div className="flex items-center justify-center gap-2">

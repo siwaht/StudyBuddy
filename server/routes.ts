@@ -1654,6 +1654,74 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
+  // Get ElevenLabs user subscription and credit usage
+  app.get("/api/elevenlabs/subscription", requireAuth, async (req: Request, res: Response) => {
+    try {
+      // Get API key
+      const apiKey = await elevenlabsService.getApiKey();
+      if (!apiKey) {
+        return res.status(400).json({ message: "ElevenLabs API key not configured" });
+      }
+      
+      // Fetch subscription details from ElevenLabs API
+      const url = `https://api.elevenlabs.io/v1/user/subscription`;
+      console.log('[ElevenLabs] Fetching subscription data from:', url);
+      
+      const response = await fetch(url, {
+        headers: {
+          'xi-api-key': apiKey,
+        },
+      });
+      
+      if (!response.ok) {
+        const error = await response.text();
+        console.error('[ElevenLabs] Subscription API error:', error);
+        return res.status(response.status).json({ 
+          message: "Failed to fetch subscription data", 
+          error 
+        });
+      }
+      
+      const subscription = await response.json();
+      
+      // Calculate effective character limit (override takes precedence)
+      const effectiveLimit = subscription.character_limit_override || subscription.character_limit || 0;
+      const characterCount = subscription.character_count || 0;
+      
+      // Calculate accurate percentage with guard against divide-by-zero
+      let charactersUsedPercentage = 0;
+      if (effectiveLimit > 0) {
+        charactersUsedPercentage = Math.min(100, Math.round((characterCount / effectiveLimit) * 100));
+      }
+      
+      // Transform subscription data for dashboard use
+      const transformedData = {
+        characterCount,
+        characterLimit: subscription.character_limit || 0,
+        characterLimitOverride: subscription.character_limit_override || 0,
+        effectiveLimit,
+        charactersUsedPercentage,
+        charactersRemaining: Math.max(0, effectiveLimit - characterCount),
+        voiceSlotsUsed: subscription.voice_slots_used || 0,
+        voiceSlotsMax: subscription.voice_slots_max || 0,
+        professionalVoiceSlotsUsed: subscription.professional_voice_slots_used || 0,
+        subscriptionTier: subscription.subscription_tier || 'unknown',
+        canExtendCharacterLimit: subscription.can_extend_character_limit || false,
+        nextCharacterCountResetUnix: subscription.next_character_count_reset_unix || null,
+        subscriptionStatus: subscription.status || 'active'
+      };
+      
+      res.json(transformedData);
+      
+    } catch (error: any) {
+      console.error('Error fetching ElevenLabs subscription:', error);
+      res.status(500).json({ 
+        message: "Failed to fetch subscription data",
+        error: error.message 
+      });
+    }
+  });
+  
   app.post("/api/elevenlabs/outbound-call", requireAuth, async (req: Request, res: Response) => {
     try {
       const { agentId, toNumber, fromNumber, phoneNumberId, provider } = req.body;
