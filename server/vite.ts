@@ -72,9 +72,20 @@ export function serveStatic(app: Express) {
   const distPath = path.resolve(import.meta.dirname, "public");
 
   if (!fs.existsSync(distPath)) {
-    throw new Error(
-      `Could not find the build directory: ${distPath}, make sure to build the client first`,
+    // In production, log the warning but don't crash the server
+    // The build should be created during deployment
+    console.warn(
+      `Build directory not found: ${distPath}. Running npm run build...`,
     );
+    
+    // Create a simple fallback response instead of crashing
+    app.use("*", (_req, res) => {
+      res.status(503).json({
+        message: "Application is starting up. Please wait a moment and refresh.",
+        error: "Build directory not found"
+      });
+    });
+    return;
   }
 
   app.use(express.static(distPath));
