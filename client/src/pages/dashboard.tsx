@@ -258,21 +258,10 @@ export default function Dashboard() {
                 <div className="flex items-center justify-center gap-2">
                   <TrendingUp className="h-4 w-4 text-green-600" />
                   <span className="text-2xl font-bold gradient-text">
-                    {subscriptionData ? (
-                      subscriptionData.charactersUsedPercentage > 0 
-                        ? `${subscriptionData.charactersUsedPercentage}%`
-                        : subscriptionData.characterCount > 0 
-                          ? `<0.1%` 
-                          : '0%'
-                    ) : '0%'}
+                    {subscriptionData ? subscriptionData.characterCount.toLocaleString() : '0'}
                   </span>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  {subscriptionData && subscriptionData.characterCount > 0 ? 
-                    `${subscriptionData.characterCount.toLocaleString()} chars used` : 
-                    'Credits Used'
-                  }
-                </p>
+                <p className="text-xs text-muted-foreground">Characters Used</p>
               </div>
               <div className="group/stat hover:scale-105 transition-all duration-300">
                 <div className="flex items-center justify-center gap-2">
