@@ -220,19 +220,19 @@ class WebSocketService {
       }
 
       // Remove from all channels
-      for (const [channel, clients] of this.channels) {
+      this.channels.forEach((clients, channel) => {
         clients.delete(ws);
         if (clients.size === 0) {
           this.channels.delete(channel);
         }
-      }
+      });
 
       console.log(`WebSocket disconnected for user: ${ws.userId}`);
     }
   }
 
   private heartbeat(): void {
-    Array.from(this.clients.entries()).forEach(([userId, connections]) => {
+    this.clients.forEach((connections, userId) => {
       connections.forEach((ws: AuthenticatedWebSocket) => {
         if (ws.isAlive === false) {
           this.handleDisconnection(ws);
@@ -272,7 +272,7 @@ class WebSocketService {
   }
 
   public broadcastToRole(role: string, update: LiveUpdate): void {
-    Array.from(this.clients.entries()).forEach(([userId, connections]) => {
+    this.clients.forEach((connections, userId) => {
       connections.forEach((ws: AuthenticatedWebSocket) => {
         if (ws.userRole === role) {
           this.sendToClient(ws, update);
@@ -358,11 +358,11 @@ const getUsersWithAgentAccess = async (agentId: string): Promise<string[]> => {
     const allAssignments = await storage.getAllUserAgentAssignments();
     const usersWithAccess: string[] = [];
     
-    for (const [userId, assignment] of allAssignments) {
-      if (assignment.agents.some(agent => agent.id === agentId)) {
+    allAssignments.forEach((assignment, userId) => {
+      if (assignment.agents.some((agent: any) => agent.id === agentId)) {
         usersWithAccess.push(userId);
       }
-    }
+    });
     
     return usersWithAccess;
   } catch (error) {

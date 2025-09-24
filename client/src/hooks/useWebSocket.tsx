@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useRef, useState, useCallback, ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import type { UserWithoutPassword } from '@/lib/types';
 
 interface WebSocketMessage {
   type: string;
@@ -45,7 +46,7 @@ export const WebSocketProvider = ({ children }: WebSocketProviderProps) => {
   const queryClient = useQueryClient();
 
   // Get current user session for authentication
-  const { data: user } = useQuery({ 
+  const { data: user } = useQuery<UserWithoutPassword>({ 
     queryKey: ['/api/auth/me'],
     staleTime: 5 * 60 * 1000, // Cache for 5 minutes
   });
@@ -58,7 +59,8 @@ export const WebSocketProvider = ({ children }: WebSocketProviderProps) => {
       // In production, you'd want to use proper JWT tokens
       const token = user?.id || 'anonymous';
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const host = window.location.host || `${window.location.hostname}:${window.location.port || '5000'}`;
+      // In Replit environment, always use the current host without specifying port
+      const host = window.location.host;
       const wsUrl = `${protocol}//${host}/ws?token=${token}`;
       
       ws.current = new WebSocket(wsUrl);
