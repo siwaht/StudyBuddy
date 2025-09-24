@@ -1137,7 +1137,17 @@ export class DatabaseStorage implements IStorage {
     // Calculate main metrics
     const totalCalls = mainCalls.length;
     const avgDuration = totalCalls > 0 
-      ? mainCalls.reduce((sum, c) => sum + (c.duration || 0), 0) / totalCalls 
+      ? mainCalls.reduce((sum, c) => {
+          // Extract duration from metadata if available, fallback to duration field
+          let durationSecs = c.duration || 0;
+          if (c.metadata && typeof c.metadata === 'object') {
+            const metadata = c.metadata as any;
+            if (metadata.call_duration_secs && metadata.call_duration_secs > 0) {
+              durationSecs = metadata.call_duration_secs;
+            }
+          }
+          return sum + durationSecs;
+        }, 0) / totalCalls 
       : 0;
     
     const sentimentScores = { positive: 1, neutral: 0, negative: -1 };
@@ -1160,7 +1170,16 @@ export class DatabaseStorage implements IStorage {
       
       const compareTotalCalls = compareCalls.length;
       const compareAvgDuration = compareTotalCalls > 0 
-        ? compareCalls.reduce((sum, c) => sum + (c.duration || 0), 0) / compareTotalCalls 
+        ? compareCalls.reduce((sum, c) => {
+            let durationSecs = c.duration || 0;
+            if (c.metadata && typeof c.metadata === 'object') {
+              const metadata = c.metadata as any;
+              if (metadata.call_duration_secs && metadata.call_duration_secs > 0) {
+                durationSecs = metadata.call_duration_secs;
+              }
+            }
+            return sum + durationSecs;
+          }, 0) / compareTotalCalls 
         : 0;
       
       const compareAvgSentiment = compareTotalCalls > 0
@@ -1212,7 +1231,16 @@ export class DatabaseStorage implements IStorage {
         timestamp: periodStart.toISOString(),
         calls: periodCalls.length,
         avgDuration: periodCalls.length > 0 
-          ? periodCalls.reduce((sum, c) => sum + (c.duration || 0), 0) / periodCalls.length 
+          ? periodCalls.reduce((sum, c) => {
+              let durationSecs = c.duration || 0;
+              if (c.metadata && typeof c.metadata === 'object') {
+                const metadata = c.metadata as any;
+                if (metadata.call_duration_secs && metadata.call_duration_secs > 0) {
+                  durationSecs = metadata.call_duration_secs;
+                }
+              }
+              return sum + durationSecs;
+            }, 0) / periodCalls.length 
           : 0,
         sentiment: sentimentCounts
       });
@@ -1233,7 +1261,16 @@ export class DatabaseStorage implements IStorage {
         agentName: agent.name,
         totalCalls: agentTotalCalls,
         avgDuration: agentTotalCalls > 0 
-          ? agentCalls.reduce((sum, c) => sum + (c.duration || 0), 0) / agentTotalCalls 
+          ? agentCalls.reduce((sum, c) => {
+              let durationSecs = c.duration || 0;
+              if (c.metadata && typeof c.metadata === 'object') {
+                const metadata = c.metadata as any;
+                if (metadata.call_duration_secs && metadata.call_duration_secs > 0) {
+                  durationSecs = metadata.call_duration_secs;
+                }
+              }
+              return sum + durationSecs;
+            }, 0) / agentTotalCalls 
           : 0,
         avgSentiment: agentTotalCalls > 0
           ? agentCalls.reduce((sum, c) => sum + (sentimentScores[c.sentiment || 'neutral'] || 0), 0) / agentTotalCalls
