@@ -1710,6 +1710,90 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
+  // Get agent-specific credit usage  
+  app.get("/api/agents/:agentId/usage", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { agentId } = req.params;
+      const { startDate, endDate } = req.query;
+      
+      // Get the agent to verify it exists
+      const agent = await storage.getAgent(req.user!.id, agentId);
+      if (!agent) {
+        return res.status(404).json({ message: "Agent not found" });
+      }
+      
+      // Only works for ElevenLabs agents
+      if (agent.platform !== 'elevenlabs') {
+        return res.json({ 
+          creditsUsed: 0, 
+          message: "Credit tracking only available for ElevenLabs agents" 
+        });
+      }
+      
+      // Calculate usage for this specific agent by fetching calls
+      // Since the character-stats API doesn't support agent breakdown,
+      // we'll calculate from the calls data
+      try {
+        // Get all calls for this agent
+        const calls = await storage.getCallsByAgent(req.user!.id, agent.id);
+        
+        // Filter by date range if provided
+        let filteredCalls = calls;
+        if (startDate || endDate) {
+          const start = startDate ? new Date(startDate as string) : new Date(0);
+          const end = endDate ? new Date(endDate as string) : new Date();
+          
+          filteredCalls = calls.filter(call => {
+            const callDate = new Date(call.startTime);
+            return callDate >= start && callDate <= end;
+          });
+        }
+        
+        // Sum up the character usage from all calls
+        let totalCredits = 0;
+        for (const call of filteredCalls) {
+          if (call.metadata?.cost) {
+            // ElevenLabs cost is in characters
+            totalCredits += call.metadata.cost;
+          }
+        }
+        
+        res.json({
+          agentId: agent.id,
+          externalId: agent.externalId,
+          creditsUsed: totalCredits,
+          callCount: filteredCalls.length,
+          period: {
+            startDate: startDate || null,
+            endDate: endDate || null,
+          }
+        });
+        
+      } catch (error: any) {
+        console.error('[ElevenLabs] Error calculating agent usage:', error);
+        
+        // Fallback: Return 0 if we can't calculate
+        res.json({
+          agentId: agent.id,
+          externalId: agent.externalId,
+          creditsUsed: 0,
+          callCount: 0,
+          period: {
+            startDate: startDate || null,
+            endDate: endDate || null,
+          }
+        });
+      }
+      
+    } catch (error: any) {
+      console.error('Error fetching agent usage:', error);
+      res.status(500).json({ 
+        message: "Failed to fetch agent usage",
+        error: error.message 
+      });
+    }
+  });
+  
   // Get detailed conversation from ElevenLabs API including summary
   app.get("/api/elevenlabs/conversations/:conversationId", requireAuth, async (req: Request, res: Response) => {
     try {

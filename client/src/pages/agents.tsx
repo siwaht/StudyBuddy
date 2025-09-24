@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Download, Bot, Settings2, Search, AlertCircle, Trash2, RefreshCw, Clock } from "lucide-react";
+import { Download, Bot, Settings2, Search, AlertCircle, Trash2, RefreshCw, Clock, CreditCard } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import {
@@ -48,6 +48,15 @@ interface Agent {
   createdAt: string;
 }
 
+interface AgentUsage {
+  agentId: string;
+  creditsUsed: number;
+  period: {
+    startDate: string | null;
+    endDate: string | null;
+  };
+}
+
 interface Account {
   id: string;
   name: string;
@@ -79,6 +88,33 @@ export default function Agents() {
 
   const { data: accounts = [] } = useQuery<Account[]>({
     queryKey: ["/api/accounts"],
+  });
+
+  // Fetch usage for all agents
+  const { data: agentUsages = {} } = useQuery<Record<string, AgentUsage>>({
+    queryKey: ["/api/agents/usage"],
+    queryFn: async () => {
+      if (!agents || agents.length === 0) return {};
+      
+      const usages: Record<string, AgentUsage> = {};
+      
+      // Fetch usage for each agent in parallel
+      const promises = agents.map(async (agent) => {
+        try {
+          const response = await apiRequest("GET", `/api/agents/${agent.id}/usage`);
+          const data = await response.json();
+          usages[agent.id] = data;
+        } catch (error) {
+          console.error(`Failed to fetch usage for agent ${agent.id}:`, error);
+          usages[agent.id] = { agentId: agent.id, creditsUsed: 0, period: { startDate: null, endDate: null } };
+        }
+      });
+      
+      await Promise.all(promises);
+      return usages;
+    },
+    enabled: agents.length > 0,
+    staleTime: 60000, // Cache for 1 minute
   });
 
   const searchAgentMutation = useMutation({
@@ -354,6 +390,21 @@ export default function Agents() {
                       <p><span className="font-medium">Language:</span> {agent.metadata.language}</p>
                     )}
                   </div>
+                  
+                  {/* Display credit usage for ElevenLabs agents */}
+                  {agent.platform === 'elevenlabs' && (
+                    <div className="mt-2 p-2 bg-muted/30 rounded-md">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5">
+                          <CreditCard className="h-3.5 w-3.5 text-muted-foreground" />
+                          <span className="text-xs font-medium">Credits Used</span>
+                        </div>
+                        <span className="text-sm font-semibold">
+                          {agentUsages[agent.id]?.creditsUsed.toLocaleString() || '0'}
+                        </span>
+                      </div>
+                    </div>
+                  )}
                   
                   {agent.description && (
                     <p className="text-xs text-muted-foreground line-clamp-2">{agent.description}</p>
