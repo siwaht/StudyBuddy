@@ -92,16 +92,19 @@ export default function Agents() {
 
   // Fetch usage for all agents
   const { data: agentUsages = {} } = useQuery<Record<string, AgentUsage>>({
-    queryKey: ["/api/agents/usage"],
+    queryKey: ["/api/agents/usage", agents], // Include agents in query key for proper dependency
     queryFn: async () => {
       if (!agents || agents.length === 0) return {};
       
       const usages: Record<string, AgentUsage> = {};
       
-      // Fetch usage for each agent in parallel
+      // Fetch usage for each agent in parallel with error boundary
       const promises = agents.map(async (agent) => {
         try {
           const response = await apiRequest("GET", `/api/agents/${agent.id}/usage`);
+          if (!response.ok) {
+            throw new Error(`Failed to fetch usage for agent ${agent.id}`);
+          }
           const data = await response.json();
           usages[agent.id] = data;
         } catch (error) {
@@ -115,6 +118,7 @@ export default function Agents() {
     },
     enabled: agents.length > 0,
     staleTime: 60000, // Cache for 1 minute
+    refetchOnWindowFocus: false, // Prevent unnecessary refetches
   });
 
   const searchAgentMutation = useMutation({
@@ -153,6 +157,7 @@ export default function Agents() {
       setImportForm({ platform: "elevenlabs", agentId: "", accountId: "env" });
       setSearchedAgent(null);
       queryClient.invalidateQueries({ queryKey: ["/api/agents"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/agents/usage"] });
     },
     onError: (error: any) => {
       toast({
@@ -177,6 +182,7 @@ export default function Agents() {
       setImportForm({ platform: "elevenlabs", agentId: "", accountId: "env" });
       setSearchedAgent(null);
       queryClient.invalidateQueries({ queryKey: ["/api/agents"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/agents/usage"] });
     },
     onError: (error: any) => {
       toast({
@@ -198,6 +204,7 @@ export default function Agents() {
         description: "Agent status updated",
       });
       queryClient.invalidateQueries({ queryKey: ["/api/agents"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/agents/usage"] });
     },
     onError: (error: any) => {
       toast({
@@ -224,6 +231,7 @@ export default function Agents() {
       queryClient.invalidateQueries({ queryKey: ["/api/calls"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
       queryClient.invalidateQueries({ queryKey: ["/api/agents"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/agents/usage"] });
     },
     onError: (error: any) => {
       toast({
@@ -252,6 +260,7 @@ export default function Agents() {
       setIsDeleteConfirmOpen(false);
       setSelectedAgent(null);
       queryClient.invalidateQueries({ queryKey: ["/api/agents"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/agents/usage"] });
     },
     onError: (error: any) => {
       toast({
