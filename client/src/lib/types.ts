@@ -28,6 +28,9 @@ export interface CallWithAgent {
     };
   };
   metadata?: any;
+  rating?: number; // 1-5 star rating for call quality
+  categories?: string[]; // array of category strings
+  tags?: string[]; // array of tag strings for flexible labeling
   agent?: {
     id: string;
     name: string;

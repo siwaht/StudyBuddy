@@ -59,6 +59,9 @@ export const calls = pgTable("calls", {
     createdAtIdx: index("calls_created_at_idx").on(table.createdAt),
     sentimentIdx: index("calls_sentiment_idx").on(table.sentiment),
     ratingIdx: index("calls_rating_idx").on(table.rating),
+    // JSONB GIN indexes for categories and tags for efficient array queries
+    categoriesIdx: index("calls_categories_gin_idx").using("gin", table.categories),
+    tagsIdx: index("calls_tags_gin_idx").using("gin", table.tags),
     
     // Composite indexes for specific query patterns used in the app
     conversationAgentIdx: index("idx_calls_conversation_agent").on(table.conversationId, table.agentId),

@@ -1271,6 +1271,103 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Validation schemas for call management endpoints
+  const callRatingSchema = z.object({
+    rating: z.number().int().min(1).max(5)
+  });
+
+  const callCategoriesSchema = z.object({
+    categories: z.array(z.string().trim().min(1)).max(20)
+  });
+
+  const callTagsSchema = z.object({
+    tags: z.array(z.string().trim().min(1)).max(50)
+  });
+
+  // Update call rating
+  app.patch("/api/calls/:id/rating", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const validationResult = callRatingSchema.safeParse(req.body);
+      if (!validationResult.success) {
+        return res.status(400).json({ 
+          message: "Invalid rating data",
+          errors: validationResult.error.issues 
+        });
+      }
+      
+      const { rating } = validationResult.data;
+
+      // Verify user has access to this call
+      const call = await storage.getCall(req.user!.id, req.params.id);
+      if (!call) {
+        return res.status(404).json({ message: "Call not found or access denied" });
+      }
+
+      // Update the call with the new rating
+      const updatedCall = await storage.updateCall(req.params.id, { rating });
+      res.json({ message: "Rating updated successfully", call: updatedCall });
+    } catch (error) {
+      console.error('Error updating call rating:', error);
+      res.status(500).json({ message: "Failed to update call rating" });
+    }
+  });
+
+  // Update call categories
+  app.patch("/api/calls/:id/categories", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const validationResult = callCategoriesSchema.safeParse(req.body);
+      if (!validationResult.success) {
+        return res.status(400).json({ 
+          message: "Invalid categories data",
+          errors: validationResult.error.issues 
+        });
+      }
+      
+      const { categories } = validationResult.data;
+
+      // Verify user has access to this call
+      const call = await storage.getCall(req.user!.id, req.params.id);
+      if (!call) {
+        return res.status(404).json({ message: "Call not found or access denied" });
+      }
+
+      // Update the call with the new categories
+      const updatedCall = await storage.updateCall(req.params.id, { categories });
+      res.json({ message: "Categories updated successfully", call: updatedCall });
+    } catch (error) {
+      console.error('Error updating call categories:', error);
+      res.status(500).json({ message: "Failed to update call categories" });
+    }
+  });
+
+  // Update call tags
+  app.patch("/api/calls/:id/tags", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const validationResult = callTagsSchema.safeParse(req.body);
+      if (!validationResult.success) {
+        return res.status(400).json({ 
+          message: "Invalid tags data",
+          errors: validationResult.error.issues 
+        });
+      }
+      
+      const { tags } = validationResult.data;
+
+      // Verify user has access to this call
+      const call = await storage.getCall(req.user!.id, req.params.id);
+      if (!call) {
+        return res.status(404).json({ message: "Call not found or access denied" });
+      }
+
+      // Update the call with the new tags
+      const updatedCall = await storage.updateCall(req.params.id, { tags });
+      res.json({ message: "Tags updated successfully", call: updatedCall });
+    } catch (error) {
+      console.error('Error updating call tags:', error);
+      res.status(500).json({ message: "Failed to update call tags" });
+    }
+  });
+
 
   // Performance metrics routes - Protected with data isolation
   app.get("/api/metrics/agent/:agentId", requireAuth, async (req: Request, res: Response) => {

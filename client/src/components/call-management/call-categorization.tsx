@@ -42,13 +42,7 @@ export default function CallCategorization({
 
   const updateCategoriesMutation = useMutation({
     mutationFn: async (categories: string[]) => {
-      return apiRequest(`/api/calls/${callId}/categories`, {
-        method: 'PATCH',
-        body: JSON.stringify({ categories }),
-        headers: {
-          'Content-Type': 'application/json'
-        }
-      });
+      return apiRequest("PATCH", `/api/calls/${callId}/categories`, { categories });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/calls'] });
@@ -69,13 +63,7 @@ export default function CallCategorization({
 
   const updateTagsMutation = useMutation({
     mutationFn: async (tags: string[]) => {
-      return apiRequest(`/api/calls/${callId}/tags`, {
-        method: 'PATCH',
-        body: JSON.stringify({ tags }),
-        headers: {
-          'Content-Type': 'application/json'
-        }
-      });
+      return apiRequest("PATCH", `/api/calls/${callId}/tags`, { tags });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/calls'] });

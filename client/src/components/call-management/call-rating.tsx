@@ -20,13 +20,7 @@ export default function CallRating({ callId, currentRating = 0, onRatingChange }
 
   const updateRatingMutation = useMutation({
     mutationFn: async (rating: number) => {
-      return apiRequest(`/api/calls/${callId}/rating`, {
-        method: 'PATCH',
-        body: JSON.stringify({ rating }),
-        headers: {
-          'Content-Type': 'application/json'
-        }
-      });
+      return apiRequest("PATCH", `/api/calls/${callId}/rating`, { rating });
     },
     onSuccess: (data) => {
       toast({
