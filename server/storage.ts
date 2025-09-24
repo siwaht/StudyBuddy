@@ -16,6 +16,7 @@ import { eq, and, or, sql, desc, asc, between, like, inArray, gte, lte, not, isN
 import { randomUUID } from "crypto";
 import bcrypt from "bcrypt";
 import { cache, cacheKeys, cacheTTL, cacheHelpers } from "./cache";
+import { websocketService, triggerDashboardUpdate, triggerCallUpdate, triggerAgentUpdate } from "./websocket";
 
 export interface IStorage {
   // Users
@@ -618,11 +619,22 @@ export class DatabaseStorage implements IStorage {
     // Invalidate related caches using enhanced cache helpers
     await cacheHelpers.invalidateAgentCache(created.id);
     
-    // If agent is assigned to users, invalidate their caches too
+    // Trigger real-time updates
     const assignments = await db.select().from(userAgents).where(eq(userAgents.agentId, created.id));
     for (const assignment of assignments) {
       await cacheHelpers.invalidateUserCache(assignment.userId);
+      // Trigger real-time dashboard update for each user
+      await triggerDashboardUpdate(assignment.userId, { 
+        type: 'new_agent', 
+        agent: created 
+      });
     }
+    
+    // Trigger agent update broadcast
+    await triggerAgentUpdate(created.id, {
+      action: 'created',
+      agent: created
+    });
     
     return created;
   }
@@ -695,12 +707,24 @@ export class DatabaseStorage implements IStorage {
     // Invalidate related caches using enhanced cache helpers
     await cacheHelpers.invalidateCallCache(created.id);
     
-    // If call is associated with an agent, find users with access to that agent
+    // Trigger real-time updates
     if (created.agentId) {
+      // Find users with access to this agent and trigger updates
       const assignments = await db.select().from(userAgents).where(eq(userAgents.agentId, created.agentId));
       for (const assignment of assignments) {
         await cacheHelpers.invalidateUserCache(assignment.userId);
+        // Trigger real-time dashboard update for each user
+        await triggerDashboardUpdate(assignment.userId, { 
+          type: 'new_call', 
+          call: created 
+        });
       }
+      
+      // Trigger call update broadcast
+      await triggerCallUpdate(created.id, created.agentId, {
+        action: 'created',
+        call: created
+      });
     }
     
     return created;

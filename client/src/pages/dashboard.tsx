@@ -1,6 +1,7 @@
 import { useState, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
+import { useDashboardRealTime } from "@/hooks/useWebSocket";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -44,6 +45,9 @@ export default function Dashboard() {
   const [, setLocation] = useLocation();
   const [quickSearchOpen, setQuickSearchOpen] = useState(false);
   const [quickSearchQuery, setQuickSearchQuery] = useState("");
+  
+  // Enable real-time updates for dashboard
+  const { isConnected } = useDashboardRealTime();
   const [recentSearches, setRecentSearches] = useState<string[]>(() => {
     const saved = localStorage.getItem('recentSearches');
     return saved ? JSON.parse(saved) : [];

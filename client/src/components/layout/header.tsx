@@ -1,7 +1,9 @@
 import { useLocation } from "wouter";
-import { Calendar, LogOut } from "lucide-react";
+import { Calendar, LogOut, Wifi, WifiOff } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useWebSocket } from "@/hooks/useWebSocket";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 const getPageInfo = (pathname: string) => {
   switch (pathname) {
@@ -34,6 +36,7 @@ export default function Header() {
   const [location] = useLocation();
   const { title, subtitle } = getPageInfo(location);
   const { user, logout } = useAuth();
+  const { isConnected, connectionStats } = useWebSocket();
 
   const handleLogout = async () => {
     await logout();
@@ -55,6 +58,45 @@ export default function Header() {
             <Calendar className="h-4 w-4" />
             <span>Date Range: Last 7 Days</span>
           </div>
+          
+          {/* Real-time connection indicator */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="flex items-center space-x-1 text-sm">
+                {isConnected ? (
+                  <>
+                    <Wifi className="h-4 w-4 text-green-500" />
+                    <span className="hidden sm:inline text-green-600 dark:text-green-400">Live</span>
+                  </>
+                ) : (
+                  <>
+                    <WifiOff className="h-4 w-4 text-red-500" />
+                    <span className="hidden sm:inline text-red-600 dark:text-red-400">Offline</span>
+                  </>
+                )}
+              </div>
+            </TooltipTrigger>
+            <TooltipContent>
+              <div className="text-xs">
+                {isConnected ? (
+                  <div>
+                    <div>Real-time updates active</div>
+                    {connectionStats.lastConnected && (
+                      <div>Connected: {connectionStats.lastConnected.toLocaleTimeString()}</div>
+                    )}
+                  </div>
+                ) : (
+                  <div>
+                    <div>Real-time updates unavailable</div>
+                    {connectionStats.reconnectAttempts > 0 && (
+                      <div>Reconnect attempts: {connectionStats.reconnectAttempts}</div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </TooltipContent>
+          </Tooltip>
+          
           <Button
             variant="ghost"
             size="icon"

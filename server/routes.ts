@@ -1,6 +1,7 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
+import { websocketService } from "./websocket";
 import { cache, cacheKeys, cacheTTL } from "./cache";
 import { getPaginationParams, getPaginationMeta } from "./queryOptimizer";
 import { insertUserSchema, insertAgentSchema, insertCallSchema, type Account } from "@shared/schema";
@@ -2720,5 +2721,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   const httpServer = createServer(app);
+  
+  // Initialize WebSocket service for real-time updates
+  websocketService.initialize(httpServer);
+  
   return httpServer;
 }

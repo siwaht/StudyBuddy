@@ -5,6 +5,7 @@ import { queryClient } from "./lib/queryClient";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import { WebSocketProvider } from "@/hooks/useWebSocket";
 import Sidebar from "@/components/layout/sidebar";
 import Header from "@/components/layout/header";
 import { Loader2 } from "lucide-react";
@@ -153,11 +154,13 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <TooltipProvider>
-          <AppContent />
-          <Toaster />
-          <ScrollToTop />
-        </TooltipProvider>
+        <WebSocketProvider>
+          <TooltipProvider>
+            <AppContent />
+            <Toaster />
+            <ScrollToTop />
+          </TooltipProvider>
+        </WebSocketProvider>
       </AuthProvider>
     </QueryClientProvider>
   );
