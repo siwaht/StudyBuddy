@@ -46,9 +46,11 @@ export default function UserManagement() {
   });
   const { toast } = useToast();
   
-  const { data: users, isLoading, error } = useQuery<UserWithoutPassword[]>({
+  const { data: usersResponse, isLoading, error } = useQuery<{ data: UserWithoutPassword[]; pagination: any }>({
     queryKey: ["/api/users"],
   });
+  
+  const users = usersResponse?.data || [];
 
   // Fetch all agents for the assignment dropdown (admin view)
   const { data: agents } = useQuery<Agent[]>({
@@ -115,7 +117,7 @@ export default function UserManagement() {
     );
   }
 
-  if (error || !users) {
+  if (error || !usersResponse) {
     return (
       <div className="p-6" data-testid="user-management-error">
         <div className="text-center text-muted-foreground">
