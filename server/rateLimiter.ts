@@ -41,9 +41,11 @@ export const userRateLimiter = rateLimit({
     if (req.user?.id) {
       return `user_${req.user.id}`;
     }
-    // For non-authenticated, return standard IP
-    return req.ip!;
+    // For non-authenticated, use the default IP handling
+    return req.ip || 'unknown';
   },
+  skipFailedRequests: false,
+  skipSuccessfulRequests: false,
   handler: (req, res) => {
     const isUser = req.user?.id ? true : false;
     res.status(429).json({
