@@ -1509,22 +1509,146 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   app.get("/api/elevenlabs/conversations", requireAuth, async (req: Request, res: Response) => {
     try {
-      const { agentId, limit } = req.query;
+      const { agentId, limit = "50", page = "1" } = req.query;
       
-      if (!elevenlabsService.isConfigured()) {
-        return res.json([]);
+      // Get API key
+      const apiKey = await elevenlabsService.getApiKey();
+      if (!apiKey) {
+        return res.status(400).json({ message: "ElevenLabs API key not configured" });
       }
       
-      const conversations = await elevenlabsService.listConversations(
-        agentId as string,
-        limit ? parseInt(limit as string) : 100
-      );
+      // Build URL with pagination
+      let url = `https://api.elevenlabs.io/v1/convai/conversations?page_size=${limit}&page=${page}`;
+      if (agentId) {
+        url += `&agent_id=${agentId}`;
+      }
       
-      res.json(conversations);
+      console.log('[ElevenLabs] Fetching conversations from:', url);
+      
+      const response = await fetch(url, {
+        headers: {
+          'xi-api-key': apiKey,
+        },
+      });
+      
+      if (!response.ok) {
+        const error = await response.text();
+        console.error('[ElevenLabs] API error:', error);
+        return res.status(response.status).json({ 
+          message: "Failed to fetch conversations", 
+          error 
+        });
+      }
+      
+      const data = await response.json();
+      
+      // Transform conversations to include summary and key metrics
+      const transformedConversations = data.conversations?.map((conv: any) => ({
+        id: `EL-${conv.conversation_id}`,
+        conversationId: conv.conversation_id,
+        agentId: conv.agent_id,
+        startTime: new Date(conv.start_time * 1000).toISOString(),
+        endTime: conv.end_time ? new Date(conv.end_time * 1000).toISOString() : null,
+        duration: conv.end_time && conv.start_time ? conv.end_time - conv.start_time : 0,
+        status: conv.status,
+        hasAudio: conv.has_audio,
+        metadata: {
+          phase: conv.phase,
+          method: conv.method,
+          conversationMode: conv.conversation_mode,
+        }
+      })) || [];
+      
+      res.json({
+        conversations: transformedConversations,
+        pagination: {
+          page: parseInt(page as string),
+          pageSize: parseInt(limit as string),
+          hasMore: data.has_more || false,
+        }
+      });
+      
     } catch (error: any) {
-      console.error('Error fetching conversations:', error);
+      console.error('Error fetching ElevenLabs conversations:', error);
       res.status(500).json({ 
         message: "Failed to fetch conversations",
+        error: error.message 
+      });
+    }
+  });
+  
+  // Get detailed conversation from ElevenLabs API including summary
+  app.get("/api/elevenlabs/conversations/:conversationId", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { conversationId } = req.params;
+      
+      // Get API key
+      const apiKey = await elevenlabsService.getApiKey();
+      if (!apiKey) {
+        return res.status(400).json({ message: "ElevenLabs API key not configured" });
+      }
+      
+      // Fetch conversation details from ElevenLabs API
+      const url = `https://api.elevenlabs.io/v1/convai/conversations/${conversationId}`;
+      console.log('[ElevenLabs] Fetching conversation details from:', url);
+      
+      const response = await fetch(url, {
+        headers: {
+          'xi-api-key': apiKey,
+        },
+      });
+      
+      if (!response.ok) {
+        const error = await response.text();
+        console.error('[ElevenLabs] API error:', error);
+        return res.status(response.status).json({ 
+          message: "Failed to fetch conversation details", 
+          error 
+        });
+      }
+      
+      const conversation = await response.json();
+      
+      // Transform conversation data with summary and analysis
+      const transformedConversation = {
+        id: `EL-${conversation.conversation_id}`,
+        conversationId: conversation.conversation_id,
+        agentId: conversation.agent_id,
+        startTime: new Date(conversation.start_time * 1000).toISOString(),
+        endTime: conversation.end_time ? new Date(conversation.end_time * 1000).toISOString() : null,
+        duration: conversation.end_time && conversation.start_time ? conversation.end_time - conversation.start_time : 0,
+        status: conversation.status,
+        hasAudio: conversation.has_audio,
+        transcript: conversation.transcript?.map((entry: any) => ({
+          timestamp: entry.timestamp || "0:00",
+          speaker: entry.role === 'agent' ? 'agent' : 'user',
+          text: entry.message || entry.text || ""
+        })) || [],
+        analysis: {
+          summary: conversation.analysis?.summary || conversation.transcript_summary || "No summary available",
+          topics: conversation.analysis?.topics || conversation.tags || [],
+          sentiment: conversation.analysis?.sentiment || conversation.sentiment || "neutral",
+          callPurpose: conversation.analysis?.call_purpose || conversation.metadata?.purpose || "",
+          keyPoints: conversation.analysis?.key_points || [],
+          actionItems: conversation.analysis?.action_items || [],
+          outcome: conversation.analysis?.outcome || conversation.metadata?.outcome || ""
+        },
+        metadata: {
+          phase: conversation.phase,
+          method: conversation.method,
+          conversationMode: conversation.conversation_mode,
+          evaluation: conversation.evaluation,
+          variables: conversation.variables,
+        },
+        recordingUrl: conversation.has_audio ? `/api/calls/EL-${conversation.conversation_id}/recording` : null
+      };
+      
+      res.json(transformedConversation);
+      
+    } catch (error: any) {
+      console.error('Error fetching conversation details:', error);
+      res.status(500).json({ 
+        message: "Failed to fetch conversation details",
         error: error.message 
       });
     }
