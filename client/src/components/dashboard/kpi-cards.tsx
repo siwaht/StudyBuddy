@@ -8,7 +8,7 @@ interface KpiCardsProps {
     characterCount: number;
     characterLimit: number;
     charactersUsedPercentage: number;
-    nextCharacterCountResetUnix: number;
+    nextCharacterCountResetUnix: number | null;
   };
 }
 
@@ -54,9 +54,13 @@ export default function KpiCards({ stats, subscriptionData }: KpiCardsProps) {
       const isNearLimit = usagePercentage >= 95;
       
       // Calculate days until reset
-      const resetDate = new Date(subscriptionData.nextCharacterCountResetUnix * 1000);
+      const resetDate = subscriptionData.nextCharacterCountResetUnix 
+        ? new Date(subscriptionData.nextCharacterCountResetUnix * 1000)
+        : new Date();
       const now = new Date();
-      const daysUntilReset = Math.ceil((resetDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+      const daysUntilReset = subscriptionData.nextCharacterCountResetUnix
+        ? Math.ceil((resetDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+        : 0;
       
       // Format trend text
       let trendText = `${Math.round(usagePercentage)}% used`;
