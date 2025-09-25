@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useDashboardRealTime } from "@/hooks/useWebSocket";
+import { memo } from "react";
 import KpiCards from "@/components/dashboard/kpi-cards";
 import Charts from "@/components/dashboard/charts";
 import CallHistoryTable from "@/components/dashboard/call-history-table";
@@ -21,7 +22,7 @@ interface ElevenLabsSubscription {
   subscriptionStatus: string;
 }
 
-export default function Dashboard() {
+function Dashboard() {
   // Enable real-time updates for dashboard
   const { isConnected } = useDashboardRealTime();
 
@@ -70,7 +71,7 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="p-6 space-y-6 animate-fadeIn" data-testid="dashboard-page">
+    <div className="p-3 sm:p-6 space-y-4 sm:space-y-6 animate-fadeIn" data-testid="dashboard-page">
       {/* KPI Cards */}
       <KpiCards stats={stats} subscriptionData={subscriptionData} />
       
@@ -82,3 +83,5 @@ export default function Dashboard() {
     </div>
   );
 }
+
+export default memo(Dashboard);
