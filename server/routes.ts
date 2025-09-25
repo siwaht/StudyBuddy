@@ -2119,9 +2119,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Sum up the character usage from all calls
         let totalCredits = 0;
         for (const call of filteredCalls) {
-          if (call.metadata?.cost) {
-            // ElevenLabs cost is in characters
-            totalCredits += call.metadata.cost;
+          if (call.metadata && typeof call.metadata === 'object') {
+            const metadata = call.metadata as any;
+            if (metadata.cost) {
+              // ElevenLabs cost is in characters
+              totalCredits += metadata.cost;
+            }
           }
         }
         

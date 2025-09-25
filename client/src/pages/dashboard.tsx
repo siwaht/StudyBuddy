@@ -4,7 +4,6 @@ import KpiCards from "@/components/dashboard/kpi-cards";
 import Charts from "@/components/dashboard/charts";
 import CallHistoryTable from "@/components/dashboard/call-history-table";
 import type { DashboardStats, CallWithAgent } from "@/lib/types";
-import { queryClient } from "@/lib/queryClient";
 
 interface ElevenLabsSubscription {
   characterCount: number;

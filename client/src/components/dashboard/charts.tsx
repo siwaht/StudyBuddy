@@ -32,8 +32,8 @@ export default function Charts({ stats }: ChartsProps) {
             )}
           </div>
         </CardHeader>
-        <CardContent>
-          <div className="h-48">
+        <CardContent className="p-3 sm:p-6">
+          <div className="h-40 sm:h-48">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={stats.callVolumeData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
@@ -69,8 +69,8 @@ export default function Charts({ stats }: ChartsProps) {
         <CardHeader>
           <CardTitle className="text-lg">Performance Metrics</CardTitle>
         </CardHeader>
-        <CardContent>
-          <div className="space-y-6">
+        <CardContent className="p-3 sm:p-6">
+          <div className="space-y-4 sm:space-y-6">
             {performanceMetrics.map((metric, index) => (
               <div key={index}>
                 <div className="flex justify-between items-center mb-2">

@@ -85,19 +85,19 @@ export default function KpiCards({ stats, subscriptionData }: KpiCardsProps) {
   const kpis = [...baseKpis, ...platformKpis];
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 md:gap-6">
       {kpis.map((kpi, index) => (
         <Card 
           key={index}
           className="hover:shadow-md transition-shadow"
           data-testid={`kpi-card-${index}`}
         >
-          <CardContent className="p-6">
+          <CardContent className="p-4 sm:p-6">
             <div className="flex items-start justify-between mb-2">
-              <p className="text-sm text-muted-foreground font-medium">{kpi.title}</p>
-              <kpi.icon className="h-5 w-5 text-muted-foreground" />
+              <p className="text-xs sm:text-sm text-muted-foreground font-medium">{kpi.title}</p>
+              <kpi.icon className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground" />
             </div>
-            <p className="text-3xl font-semibold mb-2">
+            <p className="text-xl sm:text-2xl lg:text-3xl font-semibold mb-2">
               {kpi.value}
             </p>
             <div className="flex items-center space-x-1">
