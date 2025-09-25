@@ -2278,6 +2278,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         charactersUsedPercentage = Math.min(100, Math.round((characterCount / effectiveLimit) * 100));
       }
       
+      // Calculate next reset date based on user creation date
+      // Reset every 30 days from when the user was created
+      const userCreatedAt = new Date(req.user!.createdAt);
+      const now = new Date();
+      const daysSinceCreation = Math.floor((now.getTime() - userCreatedAt.getTime()) / (1000 * 60 * 60 * 24));
+      const currentPeriod = Math.floor(daysSinceCreation / 30);
+      const nextResetDate = new Date(userCreatedAt);
+      nextResetDate.setDate(nextResetDate.getDate() + ((currentPeriod + 1) * 30));
+      const nextCharacterCountResetUnix = Math.floor(nextResetDate.getTime() / 1000);
+      
       // Transform subscription data for dashboard use
       const transformedData = {
         characterCount,
@@ -2291,7 +2301,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         professionalVoiceSlotsUsed: subscription.professional_voice_slots_used || 0,
         subscriptionTier: subscription.subscription_tier || 'unknown',
         canExtendCharacterLimit: subscription.can_extend_character_limit || false,
-        nextCharacterCountResetUnix: subscription.next_character_count_reset_unix || null,
+        nextCharacterCountResetUnix,  // Use our calculated reset date based on user creation
         subscriptionStatus: subscription.status || 'active'
       };
       
