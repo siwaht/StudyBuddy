@@ -8,6 +8,7 @@ interface KpiCardsProps {
     characterCount: number;
     characterLimit: number;
     charactersUsedPercentage: number;
+    nextCharacterCountResetUnix: number;
   };
 }
 
@@ -52,11 +53,24 @@ export default function KpiCards({ stats, subscriptionData }: KpiCardsProps) {
       const isHighUsage = usagePercentage >= 80;
       const isNearLimit = usagePercentage >= 95;
       
+      // Calculate days until reset
+      const resetDate = new Date(subscriptionData.nextCharacterCountResetUnix * 1000);
+      const now = new Date();
+      const daysUntilReset = Math.ceil((resetDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+      
+      // Format trend text
+      let trendText = `${Math.round(usagePercentage)}% used`;
+      if (daysUntilReset > 0) {
+        trendText += ` • Resets in ${daysUntilReset}d`;
+      } else if (daysUntilReset === 0) {
+        trendText += ` • Resets today`;
+      }
+      
       platformKpis.push({
         title: "Monthly Characters Used",
         value: subscriptionData.characterCount.toLocaleString(),
         icon: Type,
-        trend: `${Math.round(usagePercentage)}% of limit`,
+        trend: trendText,
         trendColor: isNearLimit ? "text-red-600" : isHighUsage ? "text-amber-600" : "text-emerald-600",
         trendUp: undefined,
       });
