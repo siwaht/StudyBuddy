@@ -331,7 +331,7 @@ export default function Dashboard() {
       </CommandDialog>
 
       {/* KPI Cards */}
-      <KpiCards stats={stats} />
+      <KpiCards stats={stats} subscriptionData={subscriptionData} />
       
       {/* Charts */}
       <Charts stats={stats} />

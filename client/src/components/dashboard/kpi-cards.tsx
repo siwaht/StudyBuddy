@@ -1,12 +1,17 @@
 import { Card, CardContent } from "@/components/ui/card";
-import { TrendingUp, Clock, Zap, Circle, ArrowUp, ArrowDown } from "lucide-react";
+import { TrendingUp, Clock, Zap, Type, ArrowUp, ArrowDown } from "lucide-react";
 import type { DashboardStats } from "@/lib/types";
 
 interface KpiCardsProps {
   stats: DashboardStats;
+  subscriptionData?: {
+    characterCount: number;
+    characterLimit: number;
+    charactersUsedPercentage: number;
+  };
 }
 
-export default function KpiCards({ stats }: KpiCardsProps) {
+export default function KpiCards({ stats, subscriptionData }: KpiCardsProps) {
   
   const baseKpis = [
     {
@@ -40,6 +45,22 @@ export default function KpiCards({ stats }: KpiCardsProps) {
       trendUp: undefined,
       valueColor: undefined,
     });
+    
+    // Add monthly characters used if subscription data is available
+    if (subscriptionData) {
+      const usagePercentage = subscriptionData.charactersUsedPercentage;
+      const isHighUsage = usagePercentage >= 80;
+      const isNearLimit = usagePercentage >= 95;
+      
+      platformKpis.push({
+        title: "Monthly Characters Used",
+        value: subscriptionData.characterCount.toLocaleString(),
+        icon: Type,
+        trend: `${Math.round(usagePercentage)}% of limit`,
+        trendColor: isNearLimit ? "text-red-600" : isHighUsage ? "text-amber-600" : "text-emerald-600",
+        trendUp: undefined,
+      });
+    }
   }
 
 
