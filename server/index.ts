@@ -130,10 +130,11 @@ app.use((req, res, next) => {
 });
 
 (async () => {
-  // Test database connection before starting server
   const dbConnected = await testDatabaseConnection();
   if (!dbConnected) {
-    console.error('Failed to connect to database. Server startup aborted.');
+    console.error('\n❌ Failed to connect to database.');
+    console.error('📋 Please provision a Supabase database and update your .env file with the correct DATABASE_URL.');
+    console.error('💡 Once the database is ready, run: npm run db:push\n');
     process.exit(1);
   }
 
