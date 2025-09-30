@@ -35,15 +35,15 @@ function SidebarContent() {
   const { isAdmin, hasPermission } = useAuth();
   
   return (
-    <div className="w-60 bg-sidebar-background text-sidebar-foreground flex flex-col h-full">
+    <div className="w-60 md:w-64 bg-sidebar-background text-sidebar-foreground flex flex-col h-full">
       {/* Logo Section */}
-      <div className="p-6 border-b border-sidebar-border">
-        <h1 className="text-xl font-semibold text-white">AgentPlatform</h1>
-        <p className="text-sm text-sidebar-foreground/70 mt-1">Voice AI Management</p>
+      <div className="p-4 md:p-6 border-b border-sidebar-border">
+        <h1 className="text-lg md:text-xl font-semibold text-white">AgentPlatform</h1>
+        <p className="text-xs md:text-sm text-sidebar-foreground/70 mt-1">Voice AI Management</p>
       </div>
       
       {/* Navigation */}
-      <nav className="flex-1 p-4 space-y-1">
+      <nav className="flex-1 p-3 md:p-4 space-y-1 overflow-y-auto">
         <div className="space-y-1">
           {navigation.map((item) => {
             const permissionMap: Record<string, string> = {
@@ -63,14 +63,14 @@ function SidebarContent() {
               <Link key={item.name} href={item.href}>
                 <div
                   className={cn(
-                    "flex items-center p-3 rounded-lg transition-colors cursor-pointer",
-                    "hover:bg-sidebar-accent",
+                    "flex items-center p-2.5 md:p-3 rounded-lg transition-colors cursor-pointer touch-manipulation min-h-[44px]",
+                    "hover:bg-sidebar-accent active:bg-sidebar-accent/80",
                     isActive && "sidebar-active"
                   )}
                   data-testid={`nav-${item.name.toLowerCase().replace(/\s+/g, '-')}`}
                 >
-                  <item.icon className="mr-3 h-5 w-5" />
-                  <span className="font-medium">{item.name}</span>
+                  <item.icon className="mr-2 md:mr-3 h-5 w-5 flex-shrink-0" />
+                  <span className="font-medium text-sm md:text-base">{item.name}</span>
                 </div>
               </Link>
             );
@@ -78,8 +78,8 @@ function SidebarContent() {
         </div>
         
         {isAdmin && (
-          <div className="mt-8 pt-8 border-t border-sidebar-border">
-            <h3 className="px-3 mb-3 text-xs font-semibold text-sidebar-foreground/50 uppercase tracking-wider">
+          <div className="mt-6 md:mt-8 pt-6 md:pt-8 border-t border-sidebar-border">
+            <h3 className="px-2 md:px-3 mb-2 md:mb-3 text-xs font-semibold text-sidebar-foreground/50 uppercase tracking-wider">
               Administration
             </h3>
             <div className="space-y-1">
@@ -100,14 +100,14 @@ function SidebarContent() {
                   <Link key={item.name} href={item.href}>
                     <div
                       className={cn(
-                        "flex items-center p-3 rounded-lg transition-colors cursor-pointer",
-                        "hover:bg-sidebar-accent",
+                        "flex items-center p-2.5 md:p-3 rounded-lg transition-colors cursor-pointer touch-manipulation min-h-[44px]",
+                        "hover:bg-sidebar-accent active:bg-sidebar-accent/80",
                         isActive && "sidebar-active"
                       )}
                       data-testid={`nav-${item.name.toLowerCase().replace(/\s+/g, '-')}`}
                     >
-                      <item.icon className="mr-3 h-5 w-5" />
-                      <span className="font-medium">{item.name}</span>
+                      <item.icon className="mr-2 md:mr-3 h-5 w-5 flex-shrink-0" />
+                      <span className="font-medium text-sm md:text-base">{item.name}</span>
                     </div>
                   </Link>
                 );
@@ -118,11 +118,11 @@ function SidebarContent() {
       </nav>
       
       {/* Footer */}
-      <div className="p-4 border-t border-sidebar-border">
+      <div className="p-3 md:p-4 border-t border-sidebar-border flex-shrink-0">
         <div className="flex items-center justify-center space-x-2 text-xs text-sidebar-foreground/50">
           <div className="flex items-center space-x-1">
             <div className="w-2 h-2 rounded-full bg-green-500" />
-            <span>System Online</span>
+            <span className="hidden sm:inline">System Online</span>
           </div>
         </div>
       </div>

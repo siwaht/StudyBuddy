@@ -472,32 +472,32 @@ export class ElevenLabsIntegration {
   }): Promise<void> {
     try {
       let recordingUrl: string | undefined;
-      
+
       // If audio data is provided, we need to save it
       if (webhookData.audio) {
         // Convert base64 to buffer
         const audioBuffer = Buffer.from(webhookData.audio, 'base64');
-        
+
         // Save to a file or cloud storage
         // For now, we'll save locally but in production you'd want to use S3 or similar
         const fileName = `recording_${webhookData.conversation_id}.mp3`;
         const fs = await import('fs');
         const path = await import('path');
-        
+
         const recordingsDir = path.join(process.cwd(), 'recordings');
         if (!fs.existsSync(recordingsDir)) {
           fs.mkdirSync(recordingsDir, { recursive: true });
         }
-        
+
         const filePath = path.join(recordingsDir, fileName);
         fs.writeFileSync(filePath, audioBuffer);
-        
+
         // Store the URL/path
         recordingUrl = `/recordings/${fileName}`;
-        
+
         console.log(`Saved recording for conversation ${webhookData.conversation_id}`);
       }
-      
+
       // Update the call record in the database with the recording URL
       if (recordingUrl) {
         // Find calls with this conversation ID
@@ -514,6 +514,238 @@ export class ElevenLabsIntegration {
       console.error('Error processing webhook data:', error);
       throw error;
     }
+  }
+
+  // Check if service is configured
+  isConfigured(): boolean {
+    return !!(process.env.ELEVENLABS_API_KEY);
+  }
+
+  // Generate signed URL for private agents
+  async getSignedUrl(agentId: string, accountId?: string): Promise<string | null> {
+    const apiKey = await this.getApiKey(accountId);
+    if (!apiKey) {
+      console.error("ElevenLabs API key not configured");
+      return null;
+    }
+
+    try {
+      const response = await fetch(
+        `https://api.elevenlabs.io/v1/convai/conversation/get_signed_url?agent_id=${agentId}`,
+        {
+          method: "GET",
+          headers: {
+            "xi-api-key": apiKey,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`Failed to get signed URL: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      return data.signed_url;
+    } catch (error) {
+      console.error("Error getting signed URL:", error);
+      return null;
+    }
+  }
+
+  // Get recording URL for a conversation (for streaming)
+  async getConversationRecordingUrl(conversationId: string, accountId?: string): Promise<string | null> {
+    const apiKey = await this.getApiKey(accountId);
+    if (!apiKey) {
+      return null;
+    }
+
+    try {
+      return `/api/calls/${conversationId}/recording`;
+    } catch (error) {
+      console.error(`Error generating recording URL for conversation ${conversationId}:`, error);
+      return null;
+    }
+  }
+
+  // Initiate outbound call via Twilio
+  async initiateOutboundCallTwilio(params: {
+    agentId: string;
+    toNumber: string;
+    fromNumber?: string;
+  }): Promise<any> {
+    const apiKey = await this.getApiKey();
+    if (!apiKey) {
+      throw new Error("ElevenLabs API key not configured");
+    }
+
+    try {
+      const response = await fetch(
+        "https://api.elevenlabs.io/v1/convai/conversation/initiate_outbound_call",
+        {
+          method: "POST",
+          headers: {
+            "xi-api-key": apiKey,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            agent_id: params.agentId,
+            customer: {
+              number: params.toNumber,
+            },
+            from_number: params.fromNumber,
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const error = await response.text();
+        throw new Error(`Failed to initiate call: ${error}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error("Error initiating outbound call:", error);
+      throw error;
+    }
+  }
+
+  // Initiate outbound call via SIP trunk
+  async initiateOutboundCallSIP(params: {
+    agentId: string;
+    agentPhoneNumberId: string;
+    toNumber: string;
+    customHeaders?: Record<string, string>;
+  }): Promise<any> {
+    const apiKey = await this.getApiKey();
+    if (!apiKey) {
+      throw new Error("ElevenLabs API key not configured");
+    }
+
+    try {
+      const response = await fetch(
+        "https://api.elevenlabs.io/v1/convai/sip-trunk/outbound-call",
+        {
+          method: "POST",
+          headers: {
+            "xi-api-key": apiKey,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            agent_id: params.agentId,
+            agent_phone_number_id: params.agentPhoneNumberId,
+            to_number: params.toNumber,
+            custom_headers: params.customHeaders,
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const error = await response.text();
+        throw new Error(`Failed to initiate SIP call: ${error}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error("Error initiating SIP outbound call:", error);
+      throw error;
+    }
+  }
+
+  // Register phone number with agent
+  async registerPhoneNumber(params: {
+    agentId: string;
+    phoneNumberId: string;
+    twilioAccountSid?: string;
+    twilioAuthToken?: string;
+  }): Promise<any> {
+    const apiKey = await this.getApiKey();
+    if (!apiKey) {
+      throw new Error("ElevenLabs API key not configured");
+    }
+
+    try {
+      const body: any = {
+        agent_id: params.agentId,
+        phone_number_id: params.phoneNumberId,
+      };
+
+      if (params.twilioAccountSid && params.twilioAuthToken) {
+        body.twilio_account_sid = params.twilioAccountSid;
+        body.twilio_auth_token = params.twilioAuthToken;
+      }
+
+      const response = await fetch(
+        "https://api.elevenlabs.io/v1/convai/phone-numbers/register",
+        {
+          method: "POST",
+          headers: {
+            "xi-api-key": apiKey,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(body),
+        }
+      );
+
+      if (!response.ok) {
+        const error = await response.text();
+        throw new Error(`Failed to register phone number: ${error}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error("Error registering phone number:", error);
+      throw error;
+    }
+  }
+
+  // Get usage analytics
+  async getUsageAnalytics(startDate?: Date, endDate?: Date, accountId?: string): Promise<any> {
+    const apiKey = await this.getApiKey(accountId);
+    if (!apiKey) {
+      return null;
+    }
+
+    try {
+      let url = "https://api.elevenlabs.io/v1/usage/character-stats";
+      const params = new URLSearchParams();
+
+      if (startDate) {
+        params.append("start_unix", Math.floor(startDate.getTime() / 1000).toString());
+      }
+      if (endDate) {
+        params.append("end_unix", Math.floor(endDate.getTime() / 1000).toString());
+      }
+
+      if (params.toString()) {
+        url += "?" + params.toString();
+      }
+
+      const response = await fetch(url, {
+        method: "GET",
+        headers: {
+          "xi-api-key": apiKey,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch usage analytics: ${response.statusText}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error("Error fetching usage analytics:", error);
+      return null;
+    }
+  }
+
+  // Fetch agent details
+  async getAgent(agentId: string, accountId?: string): Promise<any> {
+    return this.fetchAgentById(agentId, accountId);
+  }
+
+  // List all agents
+  async listAllAgents(accountId?: string): Promise<any[]> {
+    return this.listAgents(100, accountId);
   }
 }
 

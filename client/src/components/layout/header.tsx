@@ -46,20 +46,20 @@ export default function Header() {
   };
 
   return (
-    <header className="bg-card border-b border-border px-4 md:px-6 py-3 md:py-4">
-      <div className="flex justify-between items-center">
-        <div className="ml-12 md:ml-0">
-          <h2 className="text-xl md:text-2xl font-semibold text-foreground" data-testid="page-title">
+    <header className="bg-card border-b border-border px-3 sm:px-4 md:px-6 py-2.5 sm:py-3 md:py-4">
+      <div className="flex justify-between items-center gap-2 sm:gap-4">
+        <div className="ml-12 md:ml-0 flex-1 min-w-0">
+          <h2 className="text-base sm:text-lg md:text-xl lg:text-2xl font-semibold text-foreground truncate" data-testid="page-title">
             {title}
           </h2>
-          <p className="text-xs md:text-sm text-muted-foreground" data-testid="page-subtitle">
+          <p className="text-xs sm:text-sm text-muted-foreground hidden xs:block truncate" data-testid="page-subtitle">
             {subtitle}
           </p>
         </div>
-        <div className="flex items-center space-x-2 md:space-x-4">
-          <div className="hidden md:flex items-center space-x-2 text-sm text-muted-foreground">
-            <Calendar className="h-4 w-4" />
-            <span>Date Range: Last 7 Days</span>
+        <div className="flex items-center space-x-1 sm:space-x-2 md:space-x-3 flex-shrink-0">
+          <div className="hidden lg:flex items-center space-x-2 text-sm text-muted-foreground">
+            <Calendar className="h-4 w-4 flex-shrink-0" />
+            <span className="whitespace-nowrap">Last 7 Days</span>
           </div>
           
           {/* PWA Actions */}
@@ -70,11 +70,11 @@ export default function Header() {
                   variant="outline"
                   size="icon"
                   onClick={updateApp}
-                  className="h-8 w-8 relative"
+                  className="h-9 w-9 sm:h-10 sm:w-10 relative touch-manipulation"
                   data-testid="button-update-app"
                 >
                   <RefreshCw className="h-4 w-4" />
-                  <Badge className="absolute -top-1 -right-1 h-3 w-3 p-0 flex items-center justify-center bg-blue-500">
+                  <Badge className="absolute -top-1 -right-1 h-3 w-3 p-0 flex items-center justify-center bg-blue-500 text-[10px]">
                     !
                   </Badge>
                 </Button>
@@ -92,7 +92,7 @@ export default function Header() {
                   variant="outline"
                   size="icon"
                   onClick={installApp}
-                  className="h-8 w-8"
+                  className="h-9 w-9 sm:h-10 sm:w-10 touch-manipulation"
                   data-testid="button-install-app"
                 >
                   <Download className="h-4 w-4" />
@@ -110,7 +110,7 @@ export default function Header() {
                 variant="ghost"
                 size="icon"
                 onClick={shareApp}
-                className="h-8 w-8"
+                className="h-9 w-9 sm:h-10 sm:w-10 touch-manipulation hidden sm:flex"
                 data-testid="button-share-app"
               >
                 <Share className="h-4 w-4" />
@@ -124,16 +124,16 @@ export default function Header() {
           {/* Real-time connection indicator */}
           <Tooltip>
             <TooltipTrigger asChild>
-              <div className="flex items-center space-x-1 text-sm">
+              <div className="flex items-center space-x-1 text-xs sm:text-sm min-h-[44px] justify-center">
                 {isConnected ? (
                   <>
-                    <Wifi className="h-4 w-4 text-green-500" />
-                    <span className="hidden sm:inline text-green-600 dark:text-green-400">Live</span>
+                    <Wifi className="h-4 w-4 text-green-500 flex-shrink-0" />
+                    <span className="hidden md:inline text-green-600 dark:text-green-400 whitespace-nowrap">Live</span>
                   </>
                 ) : (
                   <>
-                    <WifiOff className="h-4 w-4 text-red-500" />
-                    <span className="hidden sm:inline text-red-600 dark:text-red-400">Offline</span>
+                    <WifiOff className="h-4 w-4 text-red-500 flex-shrink-0" />
+                    <span className="hidden md:inline text-red-600 dark:text-red-400 whitespace-nowrap">Offline</span>
                   </>
                 )}
               </div>
@@ -165,9 +165,9 @@ export default function Header() {
             onClick={handleLogout}
             aria-label="Log out"
             data-testid="button-logout"
-            className="h-10 w-10"
+            className="h-9 w-9 sm:h-10 sm:w-10 touch-manipulation"
           >
-            <LogOut className="h-5 w-5" />
+            <LogOut className="h-4 w-4 sm:h-5 sm:w-5" />
           </Button>
         </div>
       </div>

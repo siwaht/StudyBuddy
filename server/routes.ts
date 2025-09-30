@@ -9,7 +9,6 @@ import { hashPassword, validatePassword, requireAuth, requireAdmin } from "./aut
 import { ensureUser, validateRequired, validateEmail, sanitizeSearchQuery, validateDateRange, sendError } from "./middleware";
 import { z } from "zod";
 import { elevenLabsIntegration } from "./integrations/elevenlabs";
-import { elevenlabsService } from "./services/elevenlabs";
 import { encrypt, decrypt } from "./utils/crypto";
 import * as fs from "fs";
 import * as path from "path";
@@ -601,8 +600,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (call.id.startsWith('EL-') && !call.recordingUrl) {
           const conversationId = call.id.replace('EL-', '');
           // Generate a direct streaming URL for the recording
-          const recordingUrl = elevenlabsService.isConfigured() 
-            ? await elevenlabsService.getConversationRecordingUrl(conversationId)
+          const recordingUrl = elevenLabsIntegration.isConfigured() 
+            ? await elevenLabsIntegration.getConversationRecordingUrl(conversationId)
             : null;
           return {
             ...call,
@@ -665,9 +664,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Fetch ElevenLabs conversations with proper filtering
       let elevenLabsCalls: any[] = [];
-      if (elevenlabsService.isConfigured()) {
+      if (elevenLabsIntegration.isConfigured()) {
         try {
-          const apiKey = await elevenlabsService.getApiKey();
+          const apiKey = await elevenLabsIntegration.getApiKey();
           if (apiKey) {
             // Build URL with enhanced parameters including summary mode and server-side filtering
             const urlParams = new URLSearchParams();
@@ -1133,7 +1132,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Add recording URL for ElevenLabs conversations if not present
       let recordingUrl = call.recordingUrl;
-      if (call.id.startsWith('EL-') && !recordingUrl && elevenlabsService.isConfigured()) {
+      if (call.id.startsWith('EL-') && !recordingUrl && elevenLabsIntegration.isConfigured()) {
         const conversationId = call.id.replace('EL-', '');
         
         // Use the agent's specific account ID if available
@@ -1148,7 +1147,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
         
         // Check if audio is actually available before providing the URL
-        const hasAudio = await elevenlabsService.hasConversationAudio(conversationId, accountId);
+        const hasAudio = await elevenLabsIntegration.hasConversationAudio(conversationId, accountId);
         if (hasAudio) {
           // Use the full call ID as the recording endpoint parameter
           recordingUrl = `/api/calls/${call.id}/recording`;
@@ -1202,14 +1201,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // First check if audio is available
-      const hasAudio = await elevenlabsService.hasConversationAudio(conversationId, accountId);
+      const hasAudio = await elevenLabsIntegration.hasConversationAudio(conversationId, accountId);
       if (!hasAudio) {
         console.log(`No audio available for conversation ${conversationId}`);
         return res.status(404).json({ message: "Audio recording not available for this conversation. The conversation may not have been recorded or audio may still be processing." });
       }
       
       // Fetch the audio from ElevenLabs
-      const audioBuffer = await elevenlabsService.getConversationAudio(conversationId, accountId);
+      const audioBuffer = await elevenLabsIntegration.getConversationAudio(conversationId, accountId);
       
       if (!audioBuffer) {
         return res.status(404).json({ message: "Recording not found or not yet available. Please try again later." });
@@ -1262,7 +1261,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Check if audio is available
-      const hasAudio = await elevenlabsService.hasConversationAudio(conversationId, accountId);
+      const hasAudio = await elevenLabsIntegration.hasConversationAudio(conversationId, accountId);
       
       if (hasAudio) {
         return res.json({ status: 'available', message: 'Recording is available' });
@@ -1989,13 +1988,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { agentId } = req.params;
       
-      if (!elevenlabsService.isConfigured()) {
+      if (!elevenLabsIntegration.isConfigured()) {
         return res.status(400).json({ 
           message: "ElevenLabs API key not configured. Please set ELEVENLABS_API_KEY environment variable." 
         });
       }
       
-      const signedUrl = await elevenlabsService.getSignedUrl(agentId);
+      const signedUrl = await elevenLabsIntegration.getSignedUrl(agentId);
       
       if (!signedUrl) {
         return res.status(500).json({ message: "Failed to generate signed URL" });
@@ -2013,11 +2012,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   app.get("/api/elevenlabs/agents", requireAuth, async (req: Request, res: Response) => {
     try {
-      if (!elevenlabsService.isConfigured()) {
+      if (!elevenLabsIntegration.isConfigured()) {
         return res.json([]); // Return empty array if not configured
       }
       
-      const agents = await elevenlabsService.listAgents();
+      const agents = await elevenLabsIntegration.listAgents();
       res.json(agents);
     } catch (error: any) {
       console.error('Error fetching ElevenLabs agents:', error);
@@ -2033,7 +2032,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { agentId, limit = "50", page = "1" } = req.query;
       
       // Get API key
-      const apiKey = await elevenlabsService.getApiKey();
+      const apiKey = await elevenLabsIntegration.getApiKey();
       if (!apiKey) {
         return res.status(400).json({ message: "ElevenLabs API key not configured" });
       }
@@ -2191,7 +2190,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { conversationId } = req.params;
       
       // Get API key
-      const apiKey = await elevenlabsService.getApiKey();
+      const apiKey = await elevenLabsIntegration.getApiKey();
       if (!apiKey) {
         return res.status(400).json({ message: "ElevenLabs API key not configured" });
       }
@@ -2266,7 +2265,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/elevenlabs/subscription", requireAuth, async (req: Request, res: Response) => {
     try {
       // Get API key
-      const apiKey = await elevenlabsService.getApiKey();
+      const apiKey = await elevenLabsIntegration.getApiKey();
       if (!apiKey) {
         return res.status(400).json({ message: "ElevenLabs API key not configured" });
       }
@@ -2344,7 +2343,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { agentId, toNumber, fromNumber, phoneNumberId, provider } = req.body;
       
-      if (!elevenlabsService.isConfigured()) {
+      if (!elevenLabsIntegration.isConfigured()) {
         return res.status(400).json({ 
           message: "ElevenLabs API key not configured" 
         });
@@ -2354,14 +2353,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       if (provider === 'sip' && phoneNumberId) {
         // Use SIP trunk for the call
-        result = await elevenlabsService.initiateOutboundCallSIP({
+        result = await elevenLabsIntegration.initiateOutboundCallSIP({
           agentId,
           agentPhoneNumberId: phoneNumberId,
           toNumber,
         });
       } else {
         // Use Twilio for the call
-        result = await elevenlabsService.initiateOutboundCallTwilio({
+        result = await elevenLabsIntegration.initiateOutboundCallTwilio({
           agentId,
           toNumber,
           fromNumber,
@@ -2385,13 +2384,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { agentId, phoneNumber, twilioAccountSid, twilioAuthToken } = req.body;
       
-      if (!elevenlabsService.isConfigured()) {
+      if (!elevenLabsIntegration.isConfigured()) {
         return res.status(400).json({ 
           message: "ElevenLabs API key not configured" 
         });
       }
       
-      const result = await elevenlabsService.registerPhoneNumber({
+      const result = await elevenLabsIntegration.registerPhoneNumber({
         agentId,
         phoneNumberId: phoneNumber,
         twilioAccountSid,
@@ -2413,7 +2412,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   app.get("/api/elevenlabs/usage", requireAuth, async (req: Request, res: Response) => {
     try {
-      if (!elevenlabsService.isConfigured()) {
+      if (!elevenLabsIntegration.isConfigured()) {
         return res.json({ 
           usage: 0,
           limit: 0,
@@ -2424,7 +2423,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const startDate = req.query.startDate ? new Date(req.query.startDate as string) : undefined;
       const endDate = req.query.endDate ? new Date(req.query.endDate as string) : undefined;
       
-      const usage = await elevenlabsService.getUsageAnalytics(startDate, endDate);
+      const usage = await elevenLabsIntegration.getUsageAnalytics(startDate, endDate);
       res.json(usage || { usage: 0, limit: 0, remaining: 0 });
     } catch (error: any) {
       console.error('Error fetching usage:', error);
@@ -2454,7 +2453,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Check if ElevenLabs API is configured
-      if (!elevenlabsService.isConfigured()) {
+      if (!elevenLabsIntegration.isConfigured()) {
         return res.status(400).json({ 
           message: "ElevenLabs API key not configured. Please add ELEVENLABS_API_KEY to your environment variables." 
         });
