@@ -4,17 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
-import { 
-  BarChart3, 
-  Phone, 
-  Bot, 
-  TrendingUp, 
-  Users, 
-  Settings,
-  Menu,
-  Key,
-  TestTube
-} from "lucide-react";
+import { ChartBar as BarChart3, Phone, Bot, TrendingUp, Users, Settings, Menu, Key, TestTube } from "lucide-react";
 import { useState } from "react";
 
 const navigation = [

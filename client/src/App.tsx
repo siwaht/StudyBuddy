@@ -8,7 +8,7 @@ import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { WebSocketProvider } from "@/hooks/useWebSocket";
 import Sidebar from "@/components/layout/sidebar";
 import Header from "@/components/layout/header";
-import { Loader2 } from "lucide-react";
+import { Loader as Loader2 } from "lucide-react";
 import { ScrollToTop } from "@/components/ui/scroll-to-top";
 
 // Lazy load pages for better performance
