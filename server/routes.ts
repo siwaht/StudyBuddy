@@ -6,6 +6,7 @@ import { cache, cacheKeys, cacheTTL } from "./cache";
 import { getPaginationParams, getPaginationMeta } from "./queryOptimizer";
 import { insertUserSchema, insertAgentSchema, insertCallSchema, type Account } from "@shared/schema";
 import { hashPassword, validatePassword, requireAuth, requireAdmin } from "./auth";
+import { ensureUser, validateRequired, validateEmail, sanitizeSearchQuery, validateDateRange, sendError } from "./middleware";
 import { z } from "zod";
 import { elevenLabsIntegration } from "./integrations/elevenlabs";
 import { elevenlabsService } from "./services/elevenlabs";
@@ -48,20 +49,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
           console.error('Session regeneration error:', err);
           return res.status(500).json({ message: "Failed to create session" });
         }
-        
+
         // Set user ID on the new session
         req.session.userId = user.id;
-        
+
         // Save the session
         req.session.save((saveErr) => {
           if (saveErr) {
             console.error('Session save error:', saveErr);
             return res.status(500).json({ message: "Failed to save session" });
           }
-          
-          // Update last active time
-          storage.updateUser(user.id, { lastActive: new Date() });
-          
+
+          // Update last active time in background
+          storage.updateUser(user.id, { lastActive: new Date() }).catch(err => {
+            console.error('Failed to update last active time:', err);
+          });
+
           const { password: _, ...userWithoutPassword } = user;
           res.json({ user: userWithoutPassword });
         });
@@ -75,14 +78,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/auth/logout", requireAuth, async (req: Request, res: Response) => {
     req.session.destroy((err) => {
       if (err) {
+        console.error('Session destroy error:', err);
         return res.status(500).json({ message: "Failed to logout" });
       }
+      res.clearCookie('sid');
       res.json({ message: "Logged out successfully" });
     });
   });
   
   app.get("/api/auth/me", requireAuth, async (req: Request, res: Response) => {
-    const { password, ...userWithoutPassword } = req.user!;
+    if (!req.user) {
+      return res.status(401).json({ message: "Authentication required" });
+    }
+    const { password, ...userWithoutPassword } = req.user;
     res.json(userWithoutPassword);
   });
   
@@ -114,24 +122,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   app.patch("/api/auth/password", requireAuth, async (req: Request, res: Response) => {
     try {
+      if (!req.user) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
+
       const { currentPassword, newPassword } = req.body;
-      
+
       if (!currentPassword || !newPassword) {
         return res.status(400).json({ message: "Current and new passwords are required" });
       }
-      
+
+      // Validate new password strength
+      if (newPassword.length < 8) {
+        return res.status(400).json({ message: "New password must be at least 8 characters long" });
+      }
+
       // Validate current password
-      const isValid = await storage.validatePassword(req.user!.id, currentPassword);
+      const isValid = await storage.validatePassword(req.user.id, currentPassword);
       if (!isValid) {
         return res.status(401).json({ message: "Current password is incorrect" });
       }
-      
+
       // Hash and update new password
       const hashedPassword = await hashPassword(newPassword);
-      await storage.updatePassword(req.user!.id, hashedPassword);
-      
+      await storage.updatePassword(req.user.id, hashedPassword);
+
       res.json({ message: "Password updated successfully" });
     } catch (error) {
+      console.error('Password update error:', error);
       res.status(500).json({ message: "Failed to update password" });
     }
   });
@@ -139,7 +157,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Dashboard routes - Protected
   app.get("/api/dashboard/stats", requireAuth, async (req: Request, res: Response) => {
     try {
-      const userId = req.user!.id;
+      if (!req.user) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
+      const userId = req.user.id;
       const cacheKey = cacheKeys.dashboardStats(userId);
       
       // Check cache first with proper validation

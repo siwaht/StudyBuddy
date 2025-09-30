@@ -43,10 +43,24 @@ class Cache {
       redisClient.on('error', (err) => {
         console.error('Redis Client Error:', err);
         this.isRedisEnabled = false;
+        // Attempt to reconnect after 10 seconds
+        setTimeout(() => {
+          if (!this.isRedisEnabled && redisClient) {
+            console.log('Attempting to reconnect to Redis...');
+            redisClient.connect().catch(e => {
+              console.error('Redis reconnection failed:', e);
+            });
+          }
+        }, 10000);
       });
 
       redisClient.on('connect', () => {
         console.log('Redis connected successfully');
+        this.isRedisEnabled = true;
+      });
+
+      redisClient.on('ready', () => {
+        console.log('Redis client ready');
         this.isRedisEnabled = true;
       });
 
@@ -60,13 +74,19 @@ class Cache {
 
   // Set data with TTL in seconds
   async set<T>(key: string, data: T, ttlSeconds: number = 300): Promise<void> {
+    // Validate TTL
+    if (ttlSeconds <= 0) {
+      console.warn(`Invalid TTL ${ttlSeconds} for key ${key}, using default 300s`);
+      ttlSeconds = 300;
+    }
+
     if (this.isRedisEnabled && redisClient) {
       try {
         await redisClient.setEx(`voice_agent:${key}`, ttlSeconds, JSON.stringify(data));
         return;
       } catch (error) {
         console.error('Redis set error, falling back to memory:', error);
-        this.isRedisEnabled = false;
+        // Don't permanently disable Redis, just fall back this time
       }
     }
 
@@ -83,19 +103,19 @@ class Cache {
         return cached ? JSON.parse(cached) : null;
       } catch (error) {
         console.error('Redis get error, falling back to memory:', error);
-        this.isRedisEnabled = false;
+        // Don't permanently disable Redis, just fall back this time
       }
     }
 
     // Fallback to in-memory cache
     const entry = this.cache.get(key);
     if (!entry) return null;
-    
+
     if (Date.now() > entry.expiry) {
       this.cache.delete(key);
       return null;
     }
-    
+
     return entry.data as T;
   }
 

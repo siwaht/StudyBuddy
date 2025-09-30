@@ -5,6 +5,15 @@ import crypto from 'crypto';
 const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || 'dev-encryption-key-32-characters';
 const ALGORITHM = 'aes-256-cbc';
 
+// Validate encryption key in production
+if (process.env.NODE_ENV === 'production' && !process.env.ENCRYPTION_KEY) {
+  console.warn('WARNING: ENCRYPTION_KEY not set in production. Using default key is insecure!');
+}
+
+if (process.env.NODE_ENV === 'production' && process.env.ENCRYPTION_KEY && process.env.ENCRYPTION_KEY.length < 32) {
+  console.error('CRITICAL: ENCRYPTION_KEY must be at least 32 characters long in production!');
+}
+
 // Ensure key is 32 bytes
 function getKey(): Buffer {
   const hash = crypto.createHash('sha256');

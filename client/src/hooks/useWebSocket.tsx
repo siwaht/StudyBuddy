@@ -196,12 +196,15 @@ export const WebSocketProvider = ({ children }: WebSocketProviderProps) => {
       // Cleanup on unmount
       if (reconnectTimer.current) {
         clearTimeout(reconnectTimer.current);
+        reconnectTimer.current = null;
       }
       if (heartbeatTimer.current) {
         clearInterval(heartbeatTimer.current);
+        heartbeatTimer.current = null;
       }
       if (ws.current) {
         ws.current.close(1000, 'Component unmount');
+        ws.current = null;
       }
     };
   }, [user?.id]);

@@ -22,12 +22,19 @@ declare module "express-session" {
 // Authentication middleware - verifies session and attaches user to request
 export async function authenticate(req: Request, res: Response, next: NextFunction) {
   if (req.session?.userId) {
-    const user = await storage.getUser(req.session.userId);
-    if (user && user.isActive) {
-      req.user = user;
-      // Update last active time
-      await storage.updateUser(user.id, { lastActive: new Date() });
-    } else {
+    try {
+      const user = await storage.getUser(req.session.userId);
+      if (user && user.isActive) {
+        req.user = user;
+        // Update last active time in background (don't await to avoid blocking)
+        storage.updateUser(user.id, { lastActive: new Date() }).catch(err => {
+          console.error('Failed to update last active time:', err);
+        });
+      } else {
+        delete req.session.userId;
+      }
+    } catch (error) {
+      console.error('Authentication error:', error);
       delete req.session.userId;
     }
   }

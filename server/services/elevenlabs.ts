@@ -32,23 +32,31 @@ class ElevenLabsService {
         if (accountId) {
           const account = await storage.getAccount(accountId);
           if (account && account.isActive && account.service === 'elevenlabs') {
-            const dbKey = decrypt(account.encryptedApiKey);
-            // Check if the decrypted key is valid (should be alphanumeric with dashes)
-            if (dbKey && /^[a-zA-Z0-9-_]{20,}$/.test(dbKey.trim())) {
-              apiKey = dbKey;
+            try {
+              const dbKey = decrypt(account.encryptedApiKey);
+              // Check if the decrypted key is valid (should be alphanumeric with dashes)
+              if (dbKey && /^[a-zA-Z0-9-_]{20,}$/.test(dbKey.trim())) {
+                apiKey = dbKey.trim();
+              }
+            } catch (decryptError) {
+              console.error('[ElevenLabs] Failed to decrypt API key from account:', decryptError);
             }
           }
         }
-        
+
         // Otherwise, get the first active ElevenLabs account
         if (!apiKey) {
           const accounts = await storage.getAccountsByService('elevenlabs');
           const activeAccount = accounts.find((a: any) => a.isActive);
           if (activeAccount) {
-            const dbKey = decrypt(activeAccount.encryptedApiKey);
-            // Check if the decrypted key is valid
-            if (dbKey && /^[a-zA-Z0-9-_]{20,}$/.test(dbKey.trim())) {
-              apiKey = dbKey;
+            try {
+              const dbKey = decrypt(activeAccount.encryptedApiKey);
+              // Check if the decrypted key is valid
+              if (dbKey && /^[a-zA-Z0-9-_]{20,}$/.test(dbKey.trim())) {
+                apiKey = dbKey.trim();
+              }
+            } catch (decryptError) {
+              console.error('[ElevenLabs] Failed to decrypt API key from database:', decryptError);
             }
           }
         }
@@ -59,15 +67,19 @@ class ElevenLabsService {
         apiKey = this.apiKey || null;
       }
 
-      // Clean the API key - remove whitespace and basic validation
+      // Clean and validate the API key
       if (apiKey) {
         apiKey = apiKey.trim();
         if (apiKey.length < 10) {
           console.error('[ElevenLabs] API key too short, falling back to environment variable');
           apiKey = process.env.ELEVENLABS_API_KEY || null;
         } else {
-          console.log('[ElevenLabs] Using API key from storage');
+          console.log('[ElevenLabs] Using valid API key');
         }
+      }
+
+      if (!apiKey) {
+        console.warn('[ElevenLabs] No API key available from any source');
       }
 
       return apiKey;
