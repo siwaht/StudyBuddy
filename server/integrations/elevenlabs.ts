@@ -1,6 +1,7 @@
 import { ElevenLabsClient } from '@elevenlabs/elevenlabs-js';
 import { storage } from '../storage';
 import { decrypt } from '../utils/crypto';
+import { audioStorage } from '../audioStorage';
 
 interface ElevenLabsAgent {
   agent_id: string;
@@ -746,6 +747,145 @@ export class ElevenLabsIntegration {
   // List all agents
   async listAllAgents(accountId?: string): Promise<any[]> {
     return this.listAgents(100, accountId);
+  }
+
+  // Fetch and store audio for a conversation
+  async fetchAndStoreAudio(
+    conversationId: string,
+    callId: string,
+    accountId?: string
+  ): Promise<{ success: boolean; storageKey?: string; error?: string }> {
+    try {
+      console.log(`[ElevenLabs] Fetching audio for conversation ${conversationId}`);
+
+      // First check if audio is available
+      const hasAudio = await this.hasConversationAudio(conversationId, accountId);
+      if (!hasAudio) {
+        console.log(`[ElevenLabs] No audio available for conversation ${conversationId}`);
+
+        // Update call status to unavailable
+        await storage.updateCall(callId, {
+          audioFetchStatus: 'unavailable',
+          audioFetchedAt: new Date()
+        });
+
+        return {
+          success: false,
+          error: 'Audio not available'
+        };
+      }
+
+      // Fetch the audio buffer
+      const audioBuffer = await this.getConversationAudio(conversationId, accountId);
+      if (!audioBuffer) {
+        console.log(`[ElevenLabs] Failed to fetch audio for conversation ${conversationId}`);
+
+        // Update call status to failed
+        await storage.updateCall(callId, {
+          audioFetchStatus: 'failed',
+          audioFetchedAt: new Date()
+        });
+
+        return {
+          success: false,
+          error: 'Failed to fetch audio'
+        };
+      }
+
+      // Upload to Supabase Storage
+      const uploadResult = await audioStorage.uploadAudio(
+        conversationId,
+        audioBuffer,
+        {
+          call_id: callId,
+          source: 'elevenlabs_api'
+        }
+      );
+
+      if (!uploadResult.success) {
+        console.error(`[ElevenLabs] Failed to upload audio for conversation ${conversationId}:`, uploadResult.error);
+
+        // Update call status to failed
+        await storage.updateCall(callId, {
+          audioFetchStatus: 'failed',
+          audioFetchedAt: new Date()
+        });
+
+        return {
+          success: false,
+          error: uploadResult.error || 'Failed to upload audio'
+        };
+      }
+
+      // Update call with storage key and status
+      await storage.updateCall(callId, {
+        audioStorageKey: uploadResult.storageKey,
+        audioFetchStatus: 'available',
+        audioFetchedAt: new Date(),
+        recordingUrl: uploadResult.publicUrl
+      });
+
+      console.log(`[ElevenLabs] Successfully stored audio for conversation ${conversationId} at ${uploadResult.storageKey}`);
+
+      return {
+        success: true,
+        storageKey: uploadResult.storageKey
+      };
+    } catch (error: any) {
+      console.error(`[ElevenLabs] Error fetching and storing audio for conversation ${conversationId}:`, error);
+
+      // Update call status to failed
+      try {
+        await storage.updateCall(callId, {
+          audioFetchStatus: 'failed',
+          audioFetchedAt: new Date()
+        });
+      } catch (updateError) {
+        console.error('[ElevenLabs] Failed to update call status:', updateError);
+      }
+
+      return {
+        success: false,
+        error: error.message || 'Unknown error'
+      };
+    }
+  }
+
+  // Batch fetch and store audio for multiple conversations
+  async batchFetchAndStoreAudio(
+    conversations: Array<{ conversationId: string; callId: string }>,
+    accountId?: string
+  ): Promise<{
+    successful: number;
+    failed: number;
+    unavailable: number;
+  }> {
+    const results = {
+      successful: 0,
+      failed: 0,
+      unavailable: 0
+    };
+
+    console.log(`[ElevenLabs] Starting batch audio fetch for ${conversations.length} conversations`);
+
+    for (const { conversationId, callId } of conversations) {
+      const result = await this.fetchAndStoreAudio(conversationId, callId, accountId);
+
+      if (result.success) {
+        results.successful++;
+      } else if (result.error === 'Audio not available') {
+        results.unavailable++;
+      } else {
+        results.failed++;
+      }
+
+      // Add a small delay to avoid rate limiting
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+
+    console.log(`[ElevenLabs] Batch audio fetch completed:`, results);
+
+    return results;
   }
 }
 

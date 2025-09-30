@@ -1710,8 +1710,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
             agentId,
             detailedConversations
           );
+
+          // After importing, fetch and store audio for newly imported conversations
+          console.log('[Sync] Starting audio fetch for imported conversations');
+          const callsNeedingAudio = await storage.getAllCalls(userId);
+          const pendingAudioCalls = callsNeedingAudio.filter(call =>
+            call.agentId === agentId &&
+            call.conversationId &&
+            call.audioFetchStatus === 'pending'
+          );
+
+          if (pendingAudioCalls.length > 0) {
+            console.log(`[Sync] Fetching audio for ${pendingAudioCalls.length} conversations`);
+
+            const audioConversations = pendingAudioCalls.map(call => ({
+              conversationId: call.conversationId!,
+              callId: call.id
+            }));
+
+            const audioResults = await elevenLabsIntegration.batchFetchAndStoreAudio(
+              audioConversations,
+              accountId || agent.accountId || undefined
+            );
+
+            console.log(`[Sync] Audio fetch results:`, audioResults);
+          }
         }
-        
+
         // Update sync history record
         await storage.updateSyncHistory(syncRecord.id, {
           status: 'completed',
@@ -3046,76 +3071,271 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/recordings/:callId/audio", requireAuth, async (req: Request, res: Response) => {
     try {
       const { callId } = req.params;
-      
+
       // Get the call and verify user has access
       const call = await storage.getCall(req.user!.id, callId);
       if (!call) {
         return res.status(404).json({ message: "Recording not found or access denied" });
       }
-      
-      // If we have a conversationId, fetch the audio from ElevenLabs API
-      if (call.conversationId) {
+
+      // Priority 1: Check if we have audio in Supabase Storage
+      if (call.audioStorageKey) {
         try {
-          // Get API key from environment or configured account
-          const apiKey = process.env.ELEVENLABS_API_KEY;
-          if (!apiKey) {
-            console.error('No ElevenLabs API key configured');
-            return res.status(404).json({ message: "No recording available - API key not configured" });
+          const { audioStorage } = await import('./audioStorage');
+          const signedUrl = await audioStorage.getSignedUrl(call.audioStorageKey);
+
+          if (signedUrl) {
+            // Redirect to signed URL for direct streaming from Supabase
+            return res.redirect(signedUrl);
           }
-          
-          // Fetch audio from ElevenLabs API
-          const elevenLabsResponse = await fetch(
-            `https://api.elevenlabs.io/v1/convai/conversations/${call.conversationId}/audio`,
-            {
-              headers: {
-                'xi-api-key': apiKey
-              }
-            }
-          );
-          
-          if (!elevenLabsResponse.ok) {
-            console.error(`ElevenLabs API error: ${elevenLabsResponse.status}`);
-            return res.status(404).json({ message: "Recording not available from ElevenLabs" });
-          }
-          
-          // Get the audio data
-          const audioBuffer = await elevenLabsResponse.arrayBuffer();
-          
-          // Set appropriate headers
-          res.setHeader('Content-Type', 'audio/mpeg');
-          res.setHeader('Content-Disposition', `attachment; filename="call_${callId}.mp3"`);
-          res.send(Buffer.from(audioBuffer));
-          return;
         } catch (error) {
-          console.error('Error fetching recording from ElevenLabs:', error);
-          // Fall through to check local storage
+          console.error('[Recording] Error getting signed URL from storage:', error);
+          // Fall through to next method
         }
       }
-      
-      // Fallback: Check if we have a local recording (from webhooks)
-      if (!call.recordingUrl) {
-        return res.status(404).json({ message: "No recording available for this call" });
-      }
-      
-      // Extract filename from recordingUrl
-      const filename = call.recordingUrl.split('/').pop();
-      if (!filename || filename.includes('..') || filename.includes('/')) {
-        return res.status(400).json({ message: "Invalid recording reference" });
+
+      // Priority 2: If conversation has audio available but not stored yet, fetch and store it
+      if (call.conversationId && call.audioFetchStatus !== 'unavailable') {
+        try {
+          console.log(`[Recording] Attempting to fetch audio for call ${callId}`);
+
+          // Try to fetch and store the audio
+          const result = await elevenLabsIntegration.fetchAndStoreAudio(
+            call.conversationId,
+            call.id,
+            undefined // Let it find the appropriate account
+          );
+
+          if (result.success && result.storageKey) {
+            // Audio was successfully fetched and stored, get signed URL
+            const { audioStorage } = await import('./audioStorage');
+            const signedUrl = await audioStorage.getSignedUrl(result.storageKey);
+
+            if (signedUrl) {
+              return res.redirect(signedUrl);
+            }
+          } else if (result.error === 'Audio not available') {
+            return res.status(404).json({ message: "Audio recording not available for this conversation" });
+          }
+        } catch (error) {
+          console.error('[Recording] Error fetching and storing audio:', error);
+          // Fall through to legacy methods
+        }
       }
 
-      const filePath = path.join(__dirname, '..', 'recordings', filename);
-      
-      if (!fs.existsSync(filePath)) {
-        return res.status(404).json({ message: "Recording file not found" });
+      // Priority 3: Check for legacy local recordings (from old webhooks)
+      if (call.recordingUrl && !call.recordingUrl.startsWith('http')) {
+        try {
+          const filename = call.recordingUrl.split('/').pop();
+          if (filename && !filename.includes('..') && !filename.includes('/')) {
+            const filePath = path.join(__dirname, '..', 'recordings', filename);
+
+            if (fs.existsSync(filePath)) {
+              res.setHeader('Content-Type', 'audio/mpeg');
+              res.setHeader('Content-Disposition', `attachment; filename="call_${callId}.mp3"`);
+              return res.sendFile(filePath);
+            }
+          }
+        } catch (error) {
+          console.error('[Recording] Error serving local file:', error);
+        }
       }
 
-      // Set appropriate headers
-      res.setHeader('Content-Type', 'audio/mpeg');
-      res.setHeader('Content-Disposition', `attachment; filename="call_${callId}.mp3"`);
-      res.sendFile(filePath);
+      // No recording available through any method
+      return res.status(404).json({
+        message: "No recording available for this call",
+        status: call.audioFetchStatus || 'unknown'
+      });
     } catch (error) {
-      console.error('Error serving recording:', error);
+      console.error('[Recording] Error serving recording:', error);
       res.status(500).json({ message: "Failed to serve recording" });
+    }
+  });
+
+  // ElevenLabs webhook endpoint for post-call notifications
+  app.post("/api/webhooks/elevenlabs/post-call", express.json({ limit: '50mb' }), async (req: Request, res: Response) => {
+    try {
+      console.log('[Webhook] Received post-call webhook from ElevenLabs');
+
+      const webhookData = req.body;
+      const { conversation_id, agent_id, status, transcript, analysis, metadata, audio } = webhookData;
+
+      if (!conversation_id || !agent_id) {
+        console.error('[Webhook] Missing required fields:', { conversation_id, agent_id });
+        return res.status(400).json({ message: "Missing required fields" });
+      }
+
+      // Find the agent by external ID (system-level search for webhooks)
+      const allSystemAgents = await db.select().from(agents).where(eq(agents.externalId, agent_id));
+      const agent = allSystemAgents[0];
+
+      if (!agent) {
+        console.log(`[Webhook] Agent not found for external ID: ${agent_id}`);
+        return res.status(404).json({ message: "Agent not found" });
+      }
+
+      // Calculate duration from metadata
+      const duration = metadata?.call_duration_secs || 0;
+      const startTime = metadata?.start_timestamp
+        ? new Date(metadata.start_timestamp * 1000)
+        : new Date();
+      const endTime = metadata?.end_timestamp
+        ? new Date(metadata.end_timestamp * 1000)
+        : new Date(startTime.getTime() + duration * 1000);
+
+      // Prepare call data
+      const callData = {
+        agentId: agent.id,
+        conversationId: conversation_id,
+        startTime,
+        endTime,
+        duration,
+        transcript: transcript || [],
+        analysis: analysis || {},
+        sentiment: (analysis?.sentiment || 'neutral') as 'positive' | 'negative' | 'neutral',
+        metadata: {
+          ...metadata,
+          agent_id,
+          status,
+          webhook_received_at: new Date().toISOString()
+        },
+        recordingUrl: null as string | null
+      };
+
+      // Create or update the call record
+      const call = await storage.createOrUpdateCallFromWebhook(callData);
+      console.log(`[Webhook] Created/updated call record: ${call.id}`);
+
+      // If audio data is provided in the webhook, store it
+      if (audio) {
+        console.log('[Webhook] Processing audio data from webhook');
+        const { audioStorage } = await import('../audioStorage');
+        const audioUploadResult = await audioStorage.uploadBase64Audio(
+          conversation_id,
+          audio,
+          {
+            call_id: call.id,
+            agent_id,
+            source: 'elevenlabs_webhook'
+          }
+        );
+
+        if (audioUploadResult.success) {
+          await storage.updateCall(call.id, {
+            audioStorageKey: audioUploadResult.storageKey,
+            audioFetchStatus: 'available',
+            audioFetchedAt: new Date(),
+            recordingUrl: audioUploadResult.publicUrl
+          });
+          console.log(`[Webhook] Stored audio for call ${call.id}`);
+        } else {
+          console.error('[Webhook] Failed to store audio:', audioUploadResult.error);
+        }
+      } else {
+        // No audio in webhook, mark as pending to fetch later
+        await storage.updateCall(call.id, {
+          audioFetchStatus: 'pending'
+        });
+        console.log('[Webhook] No audio in webhook, marked as pending');
+      }
+
+      // Return success response
+      res.status(200).json({
+        success: true,
+        message: "Webhook processed successfully",
+        call_id: call.id
+      });
+    } catch (error: any) {
+      console.error('[Webhook] Error processing webhook:', error);
+      res.status(500).json({
+        success: false,
+        message: "Failed to process webhook",
+        error: error.message
+      });
+    }
+  });
+
+  // Background job endpoint to fetch missing audio recordings
+  app.post("/api/jobs/fetch-missing-audio", requireAuth, async (req: Request, res: Response) => {
+    try {
+      // Only admins can trigger this job
+      if (req.user?.role !== 'admin') {
+        return res.status(403).json({ message: "Unauthorized" });
+      }
+
+      console.log('[Job] Starting background job to fetch missing audio');
+
+      // Get all calls with pending or failed audio status from the last 7 days
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+      const allCalls = await storage.getAllCalls(req.user.id);
+      const callsNeedingAudio = allCalls.filter(call =>
+        call.conversationId &&
+        call.createdAt >= sevenDaysAgo &&
+        (call.audioFetchStatus === 'pending' || call.audioFetchStatus === 'failed')
+      );
+
+      console.log(`[Job] Found ${callsNeedingAudio.length} calls needing audio`);
+
+      if (callsNeedingAudio.length === 0) {
+        return res.json({
+          message: "No calls need audio fetching",
+          processed: 0
+        });
+      }
+
+      // Group calls by agent to use the correct account
+      const callsByAgent = new Map<string, typeof callsNeedingAudio>();
+      for (const call of callsNeedingAudio) {
+        const agentCalls = callsByAgent.get(call.agentId) || [];
+        agentCalls.push(call);
+        callsByAgent.set(call.agentId, agentCalls);
+      }
+
+      let totalSuccessful = 0;
+      let totalFailed = 0;
+      let totalUnavailable = 0;
+
+      // Process each agent's calls
+      for (const [agentId, calls] of callsByAgent.entries()) {
+        const agent = await storage.getAgent(req.user.id, agentId);
+        if (!agent) continue;
+
+        const audioConversations = calls.map(call => ({
+          conversationId: call.conversationId!,
+          callId: call.id
+        }));
+
+        const results = await elevenLabsIntegration.batchFetchAndStoreAudio(
+          audioConversations,
+          agent.accountId || undefined
+        );
+
+        totalSuccessful += results.successful;
+        totalFailed += results.failed;
+        totalUnavailable += results.unavailable;
+      }
+
+      console.log('[Job] Background job completed:', {
+        totalSuccessful,
+        totalFailed,
+        totalUnavailable
+      });
+
+      res.json({
+        message: "Background job completed",
+        processed: callsNeedingAudio.length,
+        successful: totalSuccessful,
+        failed: totalFailed,
+        unavailable: totalUnavailable
+      });
+    } catch (error: any) {
+      console.error('[Job] Error in background job:', error);
+      res.status(500).json({
+        message: "Background job failed",
+        error: error.message
+      });
     }
   });
 

@@ -43,6 +43,11 @@ export const calls = pgTable("calls", {
   sentiment: varchar("sentiment", { enum: ["positive", "negative", "neutral"] }),
   outcome: text("outcome"),
   recordingUrl: text("recording_url"),
+  audioStorageKey: text("audio_storage_key"), // Supabase Storage key for audio file
+  audioFetchStatus: varchar("audio_fetch_status", { enum: ["pending", "available", "unavailable", "failed"] }).default("pending"),
+  audioFetchedAt: timestamp("audio_fetched_at"), // Last time audio fetch was attempted
+  hasUserAudio: boolean("has_user_audio").default(false), // User audio availability
+  hasResponseAudio: boolean("has_response_audio").default(false), // Agent response audio availability
   transcript: jsonb("transcript"), // array of transcript entries
   analysis: jsonb("analysis"), // AI analysis data
   metadata: jsonb("metadata"), // platform-specific metadata
@@ -59,10 +64,11 @@ export const calls = pgTable("calls", {
     createdAtIdx: index("calls_created_at_idx").on(table.createdAt),
     sentimentIdx: index("calls_sentiment_idx").on(table.sentiment),
     ratingIdx: index("calls_rating_idx").on(table.rating),
+    audioFetchStatusIdx: index("calls_audio_fetch_status_idx").on(table.audioFetchStatus),
     // JSONB GIN indexes for categories and tags for efficient array queries
     categoriesIdx: index("calls_categories_gin_idx").using("gin", table.categories),
     tagsIdx: index("calls_tags_gin_idx").using("gin", table.tags),
-    
+
     // Composite indexes for specific query patterns used in the app
     conversationAgentIdx: index("idx_calls_conversation_agent").on(table.conversationId, table.agentId),
     agentStartTimeIdx: index("idx_calls_agent_starttime").on(table.agentId, table.startTime),
