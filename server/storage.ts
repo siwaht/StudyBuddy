@@ -1428,22 +1428,44 @@ export class DatabaseStorage implements IStorage {
         }).filter((entry: any) => entry !== null); // Remove null entries
       }
 
-      // Prepare the call data - directly insert with custom ID
+      // Prepare the call data - directly insert with custom ID with enhanced analysis
       const callData = {
         id: callId,
         agentId,
+        conversationId: conversation.conversation_id,
         startTime,
         endTime,
         duration,
-        sentiment: conversation.analysis?.sentiment || 'neutral',
-        outcome: conversation.metadata?.outcome || 'Completed',
+        sentiment: conversation.analysis?.sentiment || conversation.sentiment || 'neutral',
+        outcome: conversation.analysis?.outcome || conversation.metadata?.outcome || 'Completed',
         recordingUrl: conversation.recording_url || conversation.audio_url || null,
+        audioFetchStatus: conversation.has_audio ? 'pending' : 'unavailable',
+        hasUserAudio: conversation.has_user_audio || false,
+        hasResponseAudio: conversation.has_response_audio || false,
         transcript: formattedTranscript,
-        analysis: conversation.analysis ? {
-          summary: conversation.analysis.summary || '',
-          topics: conversation.analysis.topics || [],
-        } : undefined,
-        metadata: conversation.metadata || {},
+        analysis: {
+          summary: conversation.analysis?.summary || conversation.transcript_summary || null,
+          topics: conversation.analysis?.topics || conversation.tags || [],
+          sentiment: conversation.analysis?.sentiment || conversation.sentiment || 'neutral',
+          callPurpose: conversation.analysis?.call_purpose || conversation.metadata?.purpose || null,
+          keyPoints: conversation.analysis?.key_points || [],
+          actionItems: conversation.analysis?.action_items || [],
+          outcome: conversation.analysis?.outcome || conversation.metadata?.outcome || null,
+          evaluation: conversation.evaluation || null,
+          successMetrics: conversation.analysis?.success_metrics || null
+        },
+        metadata: {
+          ...(conversation.metadata || {}),
+          phase: conversation.phase,
+          method: conversation.method,
+          conversationMode: conversation.conversation_mode,
+          status: conversation.status,
+          hasAudio: conversation.has_audio,
+          evaluation: conversation.evaluation,
+          variables: conversation.variables,
+          transcriptSummary: conversation.transcript_summary,
+          callSummaryTitle: conversation.call_summary_title
+        },
       };
 
       // Insert the call with custom ID

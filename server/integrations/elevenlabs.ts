@@ -32,11 +32,29 @@ interface ElevenLabsConversation {
     text: string;
   }>;
   analysis?: {
-    summary?: string;
+    summary?: string | null;
     topics?: string[];
     sentiment?: 'positive' | 'negative' | 'neutral';
+    callPurpose?: string;
+    keyPoints?: string[];
+    actionItems?: string[];
+    outcome?: string;
+    evaluation?: any;
+    successMetrics?: any;
   };
-  metadata?: any;
+  metadata?: {
+    phase?: string;
+    method?: string;
+    conversationMode?: string;
+    status?: string;
+    hasAudio?: boolean;
+    hasUserAudio?: boolean;
+    hasResponseAudio?: boolean;
+    evaluation?: any;
+    variables?: any;
+    transcriptSummary?: string;
+    callSummaryTitle?: string;
+  };
   recording_url?: string;
 }
 
@@ -336,13 +354,15 @@ export class ElevenLabsIntegration {
   ): Promise<ElevenLabsConversation | null> {
     try {
       const client = await this.getClient(accountId);
-      
+
       // Fetch conversation details using direct API call
       const apiKey = await this.getApiKey(accountId);
       if (!apiKey) {
         throw new Error('API key not available');
       }
-      
+
+      console.log(`[ElevenLabs] Fetching detailed conversation data for ${conversationId}`);
+
       const response = await fetch(
         `https://api.elevenlabs.io/v1/convai/conversations/${conversationId}`,
         {
@@ -355,6 +375,7 @@ export class ElevenLabsIntegration {
 
       if (!response.ok) {
         if (response.status === 404 || response.status === 403) {
+          console.log(`[ElevenLabs] Conversation ${conversationId} not found or access denied`);
           return null;
         }
         throw new Error(`Failed to fetch conversation: ${response.statusText}`);
@@ -362,7 +383,53 @@ export class ElevenLabsIntegration {
 
       const conversation = await response.json();
 
-      return conversation as ElevenLabsConversation;
+      // Transform and enrich the conversation data with proper analysis structure
+      const enrichedConversation: ElevenLabsConversation = {
+        conversation_id: conversation.conversation_id,
+        agent_id: conversation.agent_id,
+        user_id: conversation.user_id,
+        start_time: conversation.start_time,
+        end_time: conversation.end_time,
+        transcript: conversation.transcript?.map((entry: any) => ({
+          timestamp: entry.timestamp || "0:00",
+          speaker: entry.role === 'agent' ? 'agent' : 'user',
+          text: entry.message || entry.text || ""
+        })) || [],
+        analysis: {
+          summary: conversation.analysis?.summary || conversation.transcript_summary || null,
+          topics: conversation.analysis?.topics || conversation.tags || [],
+          sentiment: conversation.analysis?.sentiment || conversation.sentiment || 'neutral',
+          callPurpose: conversation.analysis?.call_purpose || conversation.metadata?.purpose,
+          keyPoints: conversation.analysis?.key_points || [],
+          actionItems: conversation.analysis?.action_items || [],
+          outcome: conversation.analysis?.outcome || conversation.metadata?.outcome,
+          evaluation: conversation.evaluation,
+          successMetrics: conversation.analysis?.success_metrics
+        },
+        metadata: {
+          phase: conversation.phase,
+          method: conversation.method,
+          conversationMode: conversation.conversation_mode,
+          status: conversation.status,
+          hasAudio: conversation.has_audio,
+          hasUserAudio: conversation.has_user_audio,
+          hasResponseAudio: conversation.has_response_audio,
+          evaluation: conversation.evaluation,
+          variables: conversation.variables,
+          transcriptSummary: conversation.transcript_summary,
+          callSummaryTitle: conversation.call_summary_title
+        },
+        recording_url: conversation.has_audio ? `/api/calls/EL-${conversationId}/recording` : undefined
+      };
+
+      console.log(`[ElevenLabs] Successfully fetched conversation ${conversationId} with analysis:`, {
+        hasSummary: !!enrichedConversation.analysis?.summary,
+        hasTranscript: !!enrichedConversation.transcript && enrichedConversation.transcript.length > 0,
+        hasEvaluation: !!enrichedConversation.analysis?.evaluation,
+        hasAudio: !!enrichedConversation.metadata?.hasAudio
+      });
+
+      return enrichedConversation;
     } catch (error: any) {
       console.error('Error fetching conversation details from ElevenLabs:', error.message);
       if (error.statusCode === 404 || error.statusCode === 403) {

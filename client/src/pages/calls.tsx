@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { 
+import {
   Eye, Search, Filter, ChevronDown, X, Calendar,
-  Clock, Mic, ChevronLeft, ChevronRight
+  Clock, Mic, ChevronLeft, ChevronRight, FileAudio, Users, MessageSquare
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -477,51 +477,89 @@ export default function Calls() {
 
       {/* Call Cards */}
       <div className="space-y-4">
-        {searchResult?.calls.map((call) => (
-          <Card key={call.id} data-testid={`call-card-${call.id}`}>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div className="space-y-2">
-                  <div className="flex items-center gap-3">
-                    <h3 className="font-semibold" data-testid={`call-id-${call.id}`}>
-                      Call #{call.id}
-                    </h3>
-                    <Badge className={getSentimentColor(call.sentiment || 'neutral')}>
-                      {call.sentiment || 'neutral'}
-                    </Badge>
-                    <span className="text-sm text-muted-foreground">
-                      {formatDuration(call.duration || 0)}
-                    </span>
-                    {call.recordingUrl && (
-                      <Mic className="h-4 w-4 text-muted-foreground" />
-                    )}
-                  </div>
-                  <div className="text-sm text-muted-foreground space-y-1">
-                    <p>Agent: {call.agent?.name || 'Unknown'} ({call.agent?.platform || 'N/A'})</p>
-                    <p>Started: {new Date(call.startTime).toLocaleString()}</p>
-                    {call.outcome && <p>Outcome: {call.outcome}</p>}
-                    {(call as any).callSummaryTitle && (
-                      <p className="font-medium text-foreground">
-                        📋 {(call as any).callSummaryTitle}
-                      </p>
-                    )}
-                    {(call as any).transcriptSummary && (
-                      <p className="text-sm bg-muted/50 p-2 rounded text-foreground">
-                        💬 {(call as any).transcriptSummary}
-                      </p>
-                    )}
+        {searchResult?.calls.map((call) => {
+          const callAnalysis = call.analysis as any;
+          const callMetadata = call.metadata as any;
+          const hasSummary = callAnalysis?.summary || callMetadata?.transcriptSummary;
+          const hasTranscript = call.transcript && Array.isArray(call.transcript) && call.transcript.length > 0;
+          const hasRecording = call.recordingUrl || callMetadata?.hasAudio;
+
+          return (
+            <Card key={call.id} data-testid={`call-card-${call.id}`} className="hover:shadow-md transition-shadow">
+              <CardContent className="p-6">
+                <div className="space-y-4">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1 space-y-3">
+                      <div className="flex items-center gap-3 flex-wrap">
+                        <h3 className="font-semibold text-lg" data-testid={`call-id-${call.id}`}>
+                          {callMetadata?.callSummaryTitle || `Call #${call.id.substring(0, 8)}`}
+                        </h3>
+                        <Badge className={getSentimentColor(call.sentiment || 'neutral')}>
+                          {call.sentiment || 'neutral'}
+                        </Badge>
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <Clock className="h-4 w-4" />
+                          {formatDuration(call.duration || 0)}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                        <div className="flex items-center gap-1">
+                          <Users className="h-4 w-4" />
+                          {call.agent?.name || 'Unknown'}
+                        </div>
+                        <span>•</span>
+                        <span>{new Date(call.startTime).toLocaleString()}</span>
+                      </div>
+
+                      {hasSummary && (
+                        <div className="bg-blue-50 dark:bg-blue-950 p-3 rounded-lg">
+                          <p className="text-sm text-blue-900 dark:text-blue-100 line-clamp-2">
+                            {callAnalysis?.summary || callMetadata?.transcriptSummary}
+                          </p>
+                        </div>
+                      )}
+
+                      {call.outcome && (
+                        <div className="text-sm">
+                          <span className="font-medium">Outcome:</span> {call.outcome}
+                        </div>
+                      )}
+
+                      <div className="flex items-center gap-3">
+                        {hasRecording && (
+                          <div className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
+                            <FileAudio className="h-3 w-3" />
+                            Recording Available
+                          </div>
+                        )}
+                        {hasTranscript && (
+                          <div className="flex items-center gap-1 text-xs text-blue-600 dark:text-blue-400">
+                            <MessageSquare className="h-3 w-3" />
+                            Transcript ({call.transcript.length} entries)
+                          </div>
+                        )}
+                        {callMetadata?.hasUserAudio && (
+                          <div className="flex items-center gap-1 text-xs text-purple-600 dark:text-purple-400">
+                            <Mic className="h-3 w-3" />
+                            User Audio
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <Link href={`/calls/${call.id}`}>
+                      <Button variant="outline" size="sm" data-testid={`view-call-${call.id}`}>
+                        <Eye className="h-4 w-4 mr-2" />
+                        View Details
+                      </Button>
+                    </Link>
                   </div>
                 </div>
-                <Link href={`/calls/${call.id}`}>
-                  <Button variant="outline" size="sm" data-testid={`view-call-${call.id}`}>
-                    <Eye className="h-4 w-4 mr-2" />
-                    View Details
-                  </Button>
-                </Link>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+              </CardContent>
+            </Card>
+          );
+        })}
         
         {searchResult && searchResult.calls.length === 0 && (
           <Card>
