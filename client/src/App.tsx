@@ -21,7 +21,7 @@ const Analytics = lazy(() => import("@/pages/analytics"));
 const Settings = lazy(() => import("@/pages/settings"));
 const Integrations = lazy(() => import("@/pages/integrations"));
 const NotFound = lazy(() => import("@/pages/not-found"));
-const LoginPage = lazy(() => import("@/pages/login").then(module => ({ default: module.LoginPage })));
+const LoginPage = lazy(() => import("@/pages/login"));
 
 // Protected route component
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -73,6 +73,7 @@ const PageLoader = () => (
 );
 
 function Router() {
+  console.log("Router rendering");
   return (
     <Suspense fallback={<PageLoader />}>
       <Switch>
@@ -129,7 +130,9 @@ function Router() {
 }
 
 function AppContent() {
+  console.log("AppContent rendering");
   const { isAuthenticated } = useAuth();
+  console.log("isAuthenticated:", isAuthenticated);
 
   // Show only router for login page
   if (!isAuthenticated) {
@@ -153,6 +156,7 @@ function AppContent() {
 }
 
 function App() {
+  console.log("App component rendering");
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>

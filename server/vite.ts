@@ -20,9 +20,12 @@ export function log(message: string, source = "express") {
 }
 
 export async function setupVite(app: Express, server: Server) {
+  // Disable HMR in Replit environment to prevent WebSocket errors
+  const isReplit = process.env.REPL_ID !== undefined;
+  
   const serverOptions = {
     middlewareMode: true,
-    hmr: {
+    hmr: isReplit ? false : {
       server,
       port: 5000,
     },

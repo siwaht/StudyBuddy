@@ -9,6 +9,7 @@ import { Loader2, Phone } from "lucide-react";
 import { Redirect } from "wouter";
 
 export function LoginPage() {
+  console.log("LoginPage component rendering");
   const { login, isAuthenticated, isLoading } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -114,3 +115,5 @@ export function LoginPage() {
     </div>
   );
 }
+
+export default LoginPage;

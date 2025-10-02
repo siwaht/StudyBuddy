@@ -47,4 +47,8 @@ if ('serviceWorker' in navigator) {
   });
 }
 
-createRoot(document.getElementById("root")!).render(<App />);
+console.log("React app starting to mount...");
+const root = document.getElementById("root");
+console.log("Root element:", root);
+createRoot(root!).render(<App />);
+console.log("React app rendered");
