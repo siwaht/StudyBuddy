@@ -1,4 +1,5 @@
 import type { Express, Request, Response } from "express";
+import express from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { websocketService } from "./websocket";
@@ -10,6 +11,10 @@ import { ensureUser, validateRequired, validateEmail, sanitizeSearchQuery, valid
 import { z } from "zod";
 import { elevenLabsIntegration } from "./integrations/elevenlabs";
 import { encrypt, decrypt } from "./utils/crypto";
+import { db } from "./db";
+import { agents } from "@shared/schema";
+import { eq } from "drizzle-orm";
+import { audioStorage } from "./audioStorage";
 import * as fs from "fs";
 import * as path from "path";
 import { fileURLToPath } from "url";
