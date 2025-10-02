@@ -1,13 +1,21 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.VITE_SUPABASE_URL!;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+const supabaseUrl = process.env.VITE_SUPABASE_URL;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-if (!supabaseUrl || !supabaseServiceKey) {
-  console.error('Missing Supabase configuration for audio storage');
+let supabase: SupabaseClient | null = null;
+
+function getSupabaseClient(): SupabaseClient | null {
+  if (!supabaseUrl || !supabaseServiceKey) {
+    return null;
+  }
+  
+  if (!supabase) {
+    supabase = createClient(supabaseUrl, supabaseServiceKey);
+  }
+  
+  return supabase;
 }
-
-const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
 const BUCKET_NAME = 'call-recordings';
 const SIGNED_URL_EXPIRY = 3600; // 1 hour in seconds
@@ -30,9 +38,15 @@ export class AudioStorageService {
       return;
     }
 
+    const client = getSupabaseClient();
+    if (!client) {
+      console.warn('Supabase not configured - skipping bucket initialization');
+      return;
+    }
+
     try {
       // Check if bucket exists
-      const { data: buckets, error: listError } = await supabase.storage.listBuckets();
+      const { data: buckets, error: listError } = await client.storage.listBuckets();
 
       if (listError) {
         console.error('Error listing buckets:', listError);
@@ -43,7 +57,7 @@ export class AudioStorageService {
 
       if (!bucketExists) {
         // Create the bucket
-        const { error: createError } = await supabase.storage.createBucket(BUCKET_NAME, {
+        const { error: createError } = await client.storage.createBucket(BUCKET_NAME, {
           public: false, // Private bucket - use signed URLs for access
           fileSizeLimit: 104857600, // 100MB limit
           allowedMimeTypes: ['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/ogg']
@@ -71,6 +85,14 @@ export class AudioStorageService {
     audioBuffer: Buffer,
     metadata?: Record<string, string>
   ): Promise<AudioUploadResult> {
+    const client = getSupabaseClient();
+    if (!client) {
+      return {
+        success: false,
+        error: 'Supabase storage not configured'
+      };
+    }
+
     try {
       await this.ensureBucket();
 
@@ -79,7 +101,7 @@ export class AudioStorageService {
       const storageKey = `recordings/${fileName}`;
 
       // Upload the file
-      const { data, error } = await supabase.storage
+      const { data, error } = await client.storage
         .from(BUCKET_NAME)
         .upload(storageKey, audioBuffer, {
           contentType: 'audio/mpeg',
@@ -140,8 +162,13 @@ export class AudioStorageService {
    * Get a signed URL for accessing a private audio file
    */
   async getSignedUrl(storageKey: string, expiresIn: number = SIGNED_URL_EXPIRY): Promise<string | null> {
+    const client = getSupabaseClient();
+    if (!client) {
+      return null;
+    }
+
     try {
-      const { data, error } = await supabase.storage
+      const { data, error } = await client.storage
         .from(BUCKET_NAME)
         .createSignedUrl(storageKey, expiresIn);
 
@@ -161,7 +188,12 @@ export class AudioStorageService {
    * Get public URL for a storage file (use signed URLs instead for private buckets)
    */
   getPublicUrl(storageKey: string): string {
-    const { data } = supabase.storage
+    const client = getSupabaseClient();
+    if (!client) {
+      return '';
+    }
+
+    const { data } = client.storage
       .from(BUCKET_NAME)
       .getPublicUrl(storageKey);
 
@@ -172,8 +204,13 @@ export class AudioStorageService {
    * Check if an audio file exists in storage
    */
   async audioExists(storageKey: string): Promise<boolean> {
+    const client = getSupabaseClient();
+    if (!client) {
+      return false;
+    }
+
     try {
-      const { data, error } = await supabase.storage
+      const { data, error } = await client.storage
         .from(BUCKET_NAME)
         .list(storageKey.split('/').slice(0, -1).join('/'), {
           search: storageKey.split('/').pop()
@@ -193,8 +230,13 @@ export class AudioStorageService {
    * Delete an audio file from storage
    */
   async deleteAudio(storageKey: string): Promise<boolean> {
+    const client = getSupabaseClient();
+    if (!client) {
+      return false;
+    }
+
     try {
-      const { error } = await supabase.storage
+      const { error } = await client.storage
         .from(BUCKET_NAME)
         .remove([storageKey]);
 
@@ -215,8 +257,13 @@ export class AudioStorageService {
    * Download audio file from storage
    */
   async downloadAudio(storageKey: string): Promise<Buffer | null> {
+    const client = getSupabaseClient();
+    if (!client) {
+      return null;
+    }
+
     try {
-      const { data, error } = await supabase.storage
+      const { data, error } = await client.storage
         .from(BUCKET_NAME)
         .download(storageKey);
 
@@ -236,8 +283,13 @@ export class AudioStorageService {
    * Get metadata for a stored audio file
    */
   async getAudioMetadata(storageKey: string): Promise<Record<string, any> | null> {
+    const client = getSupabaseClient();
+    if (!client) {
+      return null;
+    }
+
     try {
-      const { data, error } = await supabase.storage
+      const { data, error } = await client.storage
         .from(BUCKET_NAME)
         .list(storageKey.split('/').slice(0, -1).join('/'), {
           search: storageKey.split('/').pop()
